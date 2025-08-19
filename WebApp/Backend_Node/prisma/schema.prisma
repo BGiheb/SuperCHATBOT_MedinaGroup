@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+model User {
+  id            Int           @id @default(autoincrement())
+  email         String?       @unique
+  password      String?
+  name          String?
+  role          Role          @default(USER)
+  isAnonymous   Boolean       @default(false)
+  chatbots      Chatbot[]
+  conversations Conversation[]
+  sessions      Session[]
+  qrScans       QRScan[]
+  createdAt     DateTime      @default(now())
+}
+
+model Chatbot {
+  id            Int           @id @default(autoincrement())
+  name          String
+  description   String?
+  logoUrl       String?
+  qrUrl         String?
+  ownerId       Int
+  owner         User          @relation(fields: [ownerId], references: [id])
+  documents     Document[]
+  conversations Conversation[]
+  sessions      Session[]
+  qrScans       QRScan[]
+  createdAt     DateTime      @default(now())
+  isActive      Boolean       @default(true)
+  primaryColor  String?
+}
+
+model Document {
+  id         Int      @id @default(autoincrement())
+  fileName   String
+  fileType   String  
+  size       Int      @default(0) 
+  url        String   @unique 
+  chatbotId  Int
+  chatbot    Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  @@index([chatbotId]) 
+}
+
+model Conversation {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  chatbotId  Int
+  user       User     @relation(fields: [userId], references: [id])
+  chatbot    Chatbot  @relation(fields: [chatbotId], references: [id])
+  question   String
+  answer     String?
+  createdAt  DateTime @default(now())
+  @@index([userId, chatbotId])
+}
+
+model Session {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  chatbotId  Int
+  user       User     @relation(fields: [userId], references: [id])
+  chatbot    Chatbot  @relation(fields: [chatbotId], references: [id])
+  startedAt  DateTime @default(now())
+  endedAt    DateTime?
+  @@index([userId, chatbotId])
+}
+
+model QRScan {
+  id         Int      @id @default(autoincrement())
+  userId     Int?
+  chatbotId  Int
+  user       User?    @relation(fields: [userId], references: [id])
+  chatbot    Chatbot  @relation(fields: [chatbotId], references: [id])
+  scannedAt  DateTime @default(now())
+  @@index([chatbotId])
+}

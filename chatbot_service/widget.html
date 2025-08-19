@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Chatbot Widget</title>
+<style>
+  /* Widget global */
+  #chat-widget {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+    font-family: 'Arial', sans-serif;
+  }
+
+  /* Bulle flottante */
+  #chat-bubble {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6a11cb, #2575fc);
+    cursor: grab;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    font-size: 20px;
+    box-shadow: 0 8px 15px rgba(0,0,0,0.4);
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+
+  #chat-bubble:hover {
+    transform: scale(1.2);
+    box-shadow: 0 12px 20px rgba(0,0,0,0.5);
+  }
+
+  /* Boîte de chat */
+  #chat-box {
+    display: none;
+    flex-direction: column;
+    width: 350px;
+    height: 450px;
+    background: #1f1f2e;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+    margin-top: 10px;
+    overflow: hidden;
+    color: white;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.4s, transform 0.4s;
+  }
+
+  #chat-box.active {
+    display: flex;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Messages */
+  #messages {
+    flex: 1;
+    padding: 15px;
+    overflow-y: auto;
+    font-size: 14px;
+  }
+
+  .message-user, .message-bot {
+    display: inline-block;
+    padding: 10px 15px;
+    margin: 5px 0;
+    border-radius: 20px;
+    max-width: 70%;
+    word-wrap: break-word;
+    animation: fadeIn 0.3s;
+  }
+
+  .message-user {
+    background: #2575fc;
+    color: white;
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .message-bot {
+    background: #44475a;
+    color: #f8f8f2;
+    margin-right: auto;
+    text-align: left;
+  }
+
+  @keyframes fadeIn {
+    from {opacity:0; transform: translateY(5px);}
+    to {opacity:1; transform: translateY(0);}
+  }
+
+  /* Input */
+  #chat-input {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-top: 1px solid #444;
+    background: #2c2c3e;
+    color: white;
+    font-size: 14px;
+    outline: none;
+  }
+
+</style>
+</head>
+<body>
+
+<div id="chat-widget">
+  <div id="chat-bubble">💬</div>
+  <div id="chat-box">
+    <div id="messages"></div>
+    <input type="text" id="chat-input" placeholder="Écrire un message..." />
+  </div>
+</div>
+
+<script>
+const chatbot_id = 5; // ID du chatbot
+const bubble = document.getElementById('chat-bubble');
+const chatBox = document.getElementById('chat-box');
+const messages = document.getElementById('messages');
+const input = document.getElementById('chat-input');
+
+// Toggle chat avec animation
+bubble.addEventListener('click', () => {
+  chatBox.classList.toggle('active');
+});
+
+// Ajouter un message
+function addMessage(sender, text) {
+  const div = document.createElement('div');
+  div.className = sender === 'user' ? 'message-user' : 'message-bot';
+  div.innerHTML = `<b>${sender === 'user' ? 'Vous' : 'Bot'}:</b> ${text}`;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight; // Scroll automatique
+}
+
+// Envoyer un message
+async function sendMessage(msg) {
+  addMessage('user', msg);
+
+  try {
+    // Appel FastAPI /process
+    await fetch(`http://127.0.0.1:8000/process/${chatbot_id}`, {method:'POST'});
+
+    // Appel FastAPI /ask
+    const res = await fetch(`http://127.0.0.1:8000/ask/${chatbot_id}?question=${encodeURIComponent(msg)}`, {method:'POST'});
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    addMessage('bot', data.answer || 'Réponse vide');
+
+  } catch(err) {
+    addMessage('bot', 'Erreur de connexion ou de format');
+    console.error(err);
+  }
+}
+
+// Envoyer message à Enter
+input.addEventListener('keypress', e => {
+  if(e.key==='Enter' && input.value.trim()!=='') {
+    sendMessage(input.value.trim());
+    input.value='';
+  }
+});
+
+// Drag & Drop fluide de la bulle
+bubble.onmousedown = function(event) {
+  let shiftX = event.clientX - bubble.getBoundingClientRect().left;
+  let shiftY = event.clientY - bubble.getBoundingClientRect().top;
+
+  function moveAt(pageX, pageY) {
+    bubble.style.left = pageX - shiftX + 'px';
+    bubble.style.top = pageY - shiftY + 'px';
+  }
+
+  function onMouseMove(event) {
+    moveAt(event.pageX, event.pageY);
+  }
+
+  document.addEventListener('mousemove', onMouseMove);
+
+  bubble.onmouseup = function() {
+    document.removeEventListener('mousemove', onMouseMove);
+    bubble.onmouseup = null;
+  };
+};
+
+bubble.ondragstart = function() { return false; };
+</script>
+
+</body>
+</html>

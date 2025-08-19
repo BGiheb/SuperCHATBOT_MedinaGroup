@@ -1,0 +1,55 @@
+services:
+  # Base PostgreSQL
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  # API Python
+  chatbot:
+    build: ./chatbot_service
+    container_name: chatbot_api
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./chatbot_service/.env
+    depends_on:
+      - db
+
+  # Backend Node.js
+  backend:
+    build:
+      context: ./webapp/Backend_Node
+      dockerfile: Dockerfile
+    container_name: backend_node
+    ports:
+      - "4000:4000"
+    env_file:
+      - ./webapp/Backend_Node/.env
+    depends_on:
+      - db
+      - chatbot
+    command: >
+      sh -c "npx prisma generate && node src/server.js"
+
+  # Frontend
+  frontend:
+    build: ./webapp/frontend
+    container_name: frontend_app
+    ports:
+      - "8081:80"   # Nginx écoute sur 80
+    env_file:
+      - ./webapp/frontend/.env
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
