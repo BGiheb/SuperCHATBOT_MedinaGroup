@@ -212,7 +212,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
               onClick={() => scrollToSection('description-section')}
             >
               <FileText className="w-4 h-4 mr-2" />
-              Description
+              Msg Bienvenue
             </Button>
             <Button
               variant="ghost"
@@ -265,12 +265,12 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
               </div>
 
               <div id="description-section" className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">Message de bienvenue</Label>
                 <Textarea
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Entrez une brève description"
+                  placeholder="Modifiez le message de bienvenue"
                   rows={4}
                 />
               </div>

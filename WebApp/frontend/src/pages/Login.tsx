@@ -1,3 +1,4 @@
+// login.tsx (updated)
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Bot, Mail, Lock } from 'lucide-react';
@@ -8,6 +9,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/components/ui/use-toast';
 import { useUser } from '@/contexts/UserContext';
+import { usePlatformName } from '@/contexts/PlatformNameContext';
+import { usePlatformLogo } from '@/contexts/PlatformLogoContext'; // New context import
 import axios from 'axios';
 import { LoginResponse } from '@/types/auth';
 
@@ -20,6 +23,8 @@ const Login = () => {
   const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
   const { refreshUser } = useUser();
+  const { platformName } = usePlatformName();
+  const { platformLogo } = usePlatformLogo(); // Use the new context
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -47,7 +52,7 @@ const Login = () => {
         password,
       });
       localStorage.setItem('token', res.data.token);
-      await refreshUser(); // Update user state
+      await refreshUser();
       setIsLoading(false);
       navigate('/dashboard');
     } catch (e: any) {
@@ -148,10 +153,14 @@ const Login = () => {
             transition={{ delay: 0.2 }}
           >
             <div className="w-16 h-16 bg-gradient-primary rounded-2xl flex items-center justify-center mx-auto mb-4 pulse-glow">
-              <Bot className="w-8 h-8 text-white" />
+              {platformLogo ? (
+                <img src={platformLogo} alt="Platform Logo" className="w-8 h-8 object-contain" />
+              ) : (
+                <Bot className="w-8 h-8 text-white" />
+              )}
             </div>
-            <h1 className="text-3xl font-bold gradient-text mb-2">Welcome Back</h1>
-            <p className="text-muted-foreground">Sign in to your QR Chat Studio</p>
+            <h1 className="text-3xl font-bold gradient-text mb-2">{`Welcome to ${platformName}`}</h1>
+            <p className="text-muted-foreground">Sign in to your {platformName}</p>
           </motion.div>
 
           <motion.form

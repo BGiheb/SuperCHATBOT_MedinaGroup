@@ -18,6 +18,7 @@ import KnowledgeBase from "@/pages/KnowledgeBase";
 import QRCodes from "@/pages/QRCodes";
 import ChatHistory from "@/pages/ChatHistory";
 import Settings from "@/pages/Settings";
+import UserManagement from "@/pages/UserManagement";
 import PublicChat from "@/pages/PublicChat";
 import AdminLayout from "@/layouts/AdminLayout";
 import NotFound from "@/pages/NotFound";
@@ -32,7 +33,7 @@ const Router = () => {
   const redirectPath = token
     ? user.role === 'ADMIN'
       ? '/dashboard'
-      : chatbots && chatbots.length > 0
+      : user.role === 'SUB_ADMIN' && chatbots && chatbots.length > 0
       ? `/c/${chatbots[0].id}`
       : '/not-authorized'
     : '/login';
@@ -46,8 +47,8 @@ const Router = () => {
       />
       <Route path="/c/:chatbotId" element={<PublicChat />} />
 
-      {/* Protected Routes (ADMIN only) */}
-      <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
+      {/* Protected Routes (ADMIN and SUB_ADMIN) */}
+      <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'SUB_ADMIN']} />}>
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<Navigate to={redirectPath} replace />} />
           <Route path="dashboard" element={<Dashboard />} />
@@ -56,11 +57,17 @@ const Router = () => {
           <Route path="chat-history" element={<ChatHistory />} />
           <Route path="qr-codes" element={<QRCodes />} />
           <Route path="settings" element={<Settings />} />
-
         </Route>
       </Route>
 
-      {/* Not Authorized Route for non-admins */}
+      {/* Admin-Only Routes */}
+      <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
+        <Route path="/" element={<AdminLayout />}>
+          <Route path="users" element={<UserManagement />} />
+        </Route>
+      </Route>
+
+      {/* Not Authorized Route */}
       <Route path="/not-authorized" element={<NotAuthorized />} />
 
       {/* Catch all */}

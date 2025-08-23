@@ -57,12 +57,12 @@ router.put(
   ctrl.updateChatbot
 );
 router.get('/user-stats', auth, ctrl.getUserStats); 
-
+router.get('/my', auth, ctrl.listMyChatbots); 
+router.get('/', auth, ctrl.listMyChatbots)
 router.get('/qr-codes', auth, ctrl.getQRCodes);
 router.get('/:id',ctrl.getChatbot);
 router.post('/:id/messages', ctrl.sendMessage);
 router.get('/:id/stats', auth, ctrl.getChatbotStats);
-router.get('/', auth, ctrl.listMyChatbots);
 router.get('/:id/conversations', ctrl.getConversations);
 router.post(
   '/:id/documents',

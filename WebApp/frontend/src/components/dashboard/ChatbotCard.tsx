@@ -1,27 +1,44 @@
 import { motion } from 'framer-motion';
-import { QrCode, Edit, MoreHorizontal, FileText, Calendar, ExternalLink } from 'lucide-react';
+import { QrCode, Edit, MoreHorizontal, FileText, Calendar, ScanLine, Code, Copy, User, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Chatbot } from '@/contexts/ChatbotContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import EditChatbotModal from '@/components/chatbots/EditChatbotModal';
+
+interface Chatbot {
+  id: number;
+  name: string;
+  description?: string;
+  primaryColor: string;
+  logo: string;
+  qrUrl?: string;
+  isActive: boolean;
+  createdAt: string;
+  documentsCount: number;
+  qrScans: number;
+  conversationsCount: number; // Added conversationsCount
+  createdBy?: string; // Nom du créateur (admin ou utilisateur)
+}
 
 interface ChatbotCardProps {
   chatbot: Chatbot;
 }
 
 const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
+  console.log(`Chatbot ${chatbot.id} - qrScans:`, chatbot.qrScans); // Log pour débogage
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const { toast } = useToast();
 
   const qrUrl = `${import.meta.env.VITE_BASE_URL || window.location.origin}/c/${chatbot.id}`;
@@ -41,6 +58,222 @@ const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
 
   const handleEdit = () => {
     setIsEditModalOpen(true);
+  };
+
+  // Code HTML du widget avec l'ID du chatbot dynamique
+  const widgetCode = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Chatbot Widget</title>
+<style>
+  /* Widget global */
+  #chat-widget {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+    font-family: 'Arial', sans-serif;
+  }
+
+  /* Bulle flottante */
+  #chat-bubble {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, ${chatbot.primaryColor || '#6a11cb'}, ${
+    chatbot.primaryColor ? `${chatbot.primaryColor}CC` : '#2575fc'
+  });
+    cursor: grab;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    font-size: 20px;
+    box-shadow: 0 8px 15px rgba(0,0,0,0.4);
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+
+  #chat-bubble:hover {
+    transform: scale(1.2);
+    box-shadow: 0 12px 20px rgba(0,0,0,0.5);
+  }
+
+  /* Boîte de chat */
+  #chat-box {
+    display: none;
+    flex-direction: column;
+    width: 350px;
+    height: 450px;
+    background: #1f1f2e;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+    margin-top: 10px;
+    overflow: hidden;
+    color: white;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.4s, transform 0.4s;
+  }
+
+  #chat-box.active {
+    display: flex;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Messages */
+  #messages {
+    flex: 1;
+    padding: 15px;
+    overflow-y: auto;
+    font-size: 14px;
+  }
+
+  .message-user, .message-bot {
+    display: inline-block;
+    padding: 10px 15px;
+    margin: 5px 0;
+    border-radius: 20px;
+    max-width: 70%;
+    word-wrap: break-word;
+    animation: fadeIn 0.3s;
+  }
+
+  .message-user {
+    background: ${chatbot.primaryColor || '#2575fc'};
+    color: white;
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .message-bot {
+    background: #44475a;
+    color: #f8f8f2;
+    margin-right: auto;
+    text-align: left;
+  }
+
+  @keyframes fadeIn {
+    from {opacity:0; transform: translateY(5px);}
+    to {opacity:1; transform: translateY(0);}
+  }
+
+  /* Input */
+  #chat-input {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-top: 1px solid #444;
+    background: #2c2c3e;
+    color: white;
+    font-size: 14px;
+    outline: none;
+  }
+
+</style>
+</head>
+<body>
+
+<div id="chat-widget">
+  <div id="chat-bubble">💬</div>
+  <div id="chat-box">
+    <div id="messages"></div>
+    <input type="text" id="chat-input" placeholder="Écrire un message..." />
+  </div>
+</div>
+
+<script>
+const chatbot_id = ${chatbot.id}; // ID du chatbot dynamique
+const bubble = document.getElementById('chat-bubble');
+const chatBox = document.getElementById('chat-box');
+const messages = document.getElementById('messages');
+const input = document.getElementById('chat-input');
+
+// Toggle chat avec animation
+bubble.addEventListener('click', () => {
+  chatBox.classList.toggle('active');
+});
+
+// Ajouter un message
+function addMessage(sender, text) {
+  const div = document.createElement('div');
+  div.className = sender === 'user' ? 'message-user' : 'message-bot';
+  div.innerHTML = \`<b>\${sender === 'user' ? 'Vous' : 'Bot'}:</b> \${text}\`;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight; // Scroll automatique
+}
+
+// Envoyer un message
+async function sendMessage(msg) {
+  addMessage('user', msg);
+
+  try {
+    // Appel FastAPI /process
+    await fetch(\`${import.meta.env.VITE_API_BASE_URL}/api/process/${chatbot.id}\`, {method:'POST'});
+
+    // Appel FastAPI /ask
+    const res = await fetch(\`${import.meta.env.VITE_API_BASE_URL}/api/ask/${chatbot.id}?question=\${encodeURIComponent(msg)}\`, {method:'POST'});
+    if(!res.ok) throw new Error(\`HTTP \${res.status}\`);
+    const data = await res.json();
+    addMessage('bot', data.answer || 'Réponse vide');
+
+  } catch(err) {
+    addMessage('bot', 'Erreur de connexion ou de format');
+    console.error(err);
+  }
+}
+
+// Envoyer message à Enter
+input.addEventListener('keypress', e => {
+  if(e.key==='Enter' && input.value.trim()!=='') {
+    sendMessage(input.value.trim());
+    input.value='';
+  }
+});
+
+// Drag & Drop fluide de la bulle
+bubble.onmousedown = function(event) {
+  let shiftX = event.clientX - bubble.getBoundingClientRect().left;
+  let shiftY = event.clientY - bubble.getBoundingClientRect().top;
+
+  function moveAt(pageX, pageY) {
+    bubble.style.left = pageX - shiftX + 'px';
+    bubble.style.top = pageY - shiftY + 'px';
+  }
+
+  function onMouseMove(event) {
+    moveAt(event.pageX, event.pageY);
+  }
+
+  document.addEventListener('mousemove', onMouseMove);
+
+  bubble.onmouseup = function() {
+    document.removeEventListener('mousemove', onMouseMove);
+    bubble.onmouseup = null;
+  };
+};
+
+bubble.ondragstart = function() { return false; };
+</script>
+
+</body>
+</html>`;
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(widgetCode).then(() => {
+      toast({
+        title: 'Code Copied',
+        description: 'The chatbot widget code has been copied to your clipboard.',
+      });
+    }).catch(() => {
+      toast({
+        title: 'Error',
+        description: 'Failed to copy the code to clipboard.',
+        variant: 'destructive',
+      });
+    });
   };
 
   // Check if logo is a URL or fallback to a default
@@ -101,6 +334,10 @@ const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
                   <QrCode className="w-4 h-4 mr-2" />
                   View QR
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsCodeModalOpen(true)}>
+                  <Code className="w-4 h-4 mr-2" />
+                  Get Widget Code
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -134,6 +371,22 @@ const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
 
             <div className="flex items-center justify-between text-sm">
               <div className="flex items-center text-muted-foreground">
+                <ScanLine className="w-4 h-4 mr-2" />
+                QR Scans
+              </div>
+              <span className="font-medium">{chatbot.qrScans || 0}</span>
+            </div>
+
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center text-muted-foreground">
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Conversations
+              </div>
+              <span className="font-medium">{chatbot.conversationsCount || 0}</span>
+            </div>
+
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center text-muted-foreground">
                 <Calendar className="w-4 h-4 mr-2" />
                 Created
               </div>
@@ -142,6 +395,14 @@ const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
                   ? new Date(chatbot.createdAt).toLocaleDateString()
                   : 'Unknown'}
               </span>
+            </div>
+
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center text-muted-foreground">
+                <User className="w-4 h-4 mr-2" />
+                Created By
+              </div>
+              <span className="font-medium">{chatbot.createdBy || 'Unknown'}</span>
             </div>
           </div>
 
@@ -176,6 +437,7 @@ const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
         </Card>
       </motion.div>
 
+      {/* Modal pour le QR Code */}
       <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
         <DialogContent className="glass-card border-glass-border p-6 max-w-sm">
           <DialogTitle>
@@ -224,6 +486,43 @@ const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
             >
               Close
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal pour afficher le code du widget */}
+      <Dialog open={isCodeModalOpen} onOpenChange={setIsCodeModalOpen}>
+        <DialogContent className="glass-card border-glass-border max-w-2xl">
+          <DialogTitle>
+            <h2 className="text-xl font-bold gradient-text">
+              Chatbot Widget Code for {chatbot.name || 'Unnamed Chatbot'}
+            </h2>
+          </DialogTitle>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Copy the following code and paste it into your website's HTML to integrate the chatbot.
+            </p>
+            <Textarea
+              value={widgetCode}
+              readOnly
+              className="h-96 bg-glass/50 border-glass-border font-mono text-sm"
+            />
+            <DialogFooter>
+              <Button
+                variant="outline"
+                className="bg-glass/50 border-glass-border hover:bg-glass/80"
+                onClick={() => setIsCodeModalOpen(false)}
+              >
+                Close
+              </Button>
+              <Button
+                onClick={handleCopyCode}
+                className="bg-gradient-primary text-white"
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy Code
+              </Button>
+            </DialogFooter>
           </div>
         </DialogContent>
       </Dialog>

@@ -1,13 +1,14 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Users, MessageSquare, TrendingUp, QrCode, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Users, MessageSquare, TrendingUp, QrCode, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useChatbots } from '@/contexts/ChatbotContext';
 import ChatbotCard from '@/components/dashboard/ChatbotCard';
 import StatsCard from '@/components/dashboard/StatsCard';
 import CreateChatbotModal from '@/components/chatbots/CreateChatbotModal';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
+import { useToast } from '@/hooks/use-toast';
 
 interface UserStats {
   totalMessages: number;
@@ -22,9 +23,11 @@ interface UserStats {
 }
 
 const Dashboard = () => {
-  const { chatbots } = useChatbots();
+  const { chatbots, refetchChatbots } = useChatbots(); // Assume refetchChatbots is provided by useChatbots
   const [currentPage, setCurrentPage] = useState(1);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { toast } = useToast();
   const itemsPerPage = 6;
 
   // Fetch user stats
@@ -83,7 +86,32 @@ const Dashboard = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  if (isLoading) {
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refetchChatbots();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to refresh chatbots.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Optional: Poll for updates every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetchChatbots().catch((error: any) => {
+        console.error('Error polling chatbots:', error);
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [refetchChatbots]);
+
+  if (isLoading && chatbots.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Loading dashboard...</p>
@@ -92,17 +120,31 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 p-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <h1 className="text-4xl font-bold gradient-text mb-2">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Welcome back! Here's what's happening with your chatbots.
-        </p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold gradient-text mb-2">Dashboard</h1>
+            <p className="text-muted-foreground">
+              Welcome back! Here's what's happening with your chatbots.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="bg-glass/50 border-glass-border hover:bg-glass/80"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </motion.div>
 
       {/* Stats Grid */}

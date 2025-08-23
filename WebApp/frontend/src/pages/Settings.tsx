@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Palette, Bell, Shield, Save, Lock } from 'lucide-react';
+import { User, Palette, Bell, Shield, Save, Lock, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from '@/contexts/ThemeContext';
+import { usePlatformName } from '@/contexts/PlatformNameContext';
+import { usePlatformLogo } from '@/contexts/PlatformLogoContext';
 import ThemeToggle from '@/components/settings/ThemeToggle';
 import ColorPicker from '@/components/settings/ColorPicker';
 import { useToast } from '@/components/ui/use-toast';
@@ -18,22 +20,19 @@ const Settings = () => {
     newPassword: '',
     confirmPassword: '',
   });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const { theme } = useTheme();
+  const { platformName, setPlatformName } = usePlatformName();
+  const { platformLogo, setPlatformLogo } = usePlatformLogo();
   const { toast } = useToast();
 
-  // Fetch authenticated user data on component mount
   useEffect(() => {
     const fetchUserData = async () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) {
-          console.error('No token found');
-          toast({
-            title: 'Authentication Error',
-            description: 'No authentication token found',
-            variant: 'destructive',
-          });
-          return;
+          throw new Error('No authentication token found');
         }
 
         const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/me`, {
@@ -43,7 +42,7 @@ const Settings = () => {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch user data');
+          throw new Error(`Failed to fetch user data: ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -59,45 +58,170 @@ const Settings = () => {
     };
 
     fetchUserData();
-  }, []);
+  }, [toast]);
 
-  // Handle input changes for user data
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!['image/png', 'image/jpeg', 'image/svg+xml'].includes(file.type)) {
+        toast({
+          title: 'Error',
+          description: 'Only PNG, JPEG, or SVG files are allowed',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: 'Error',
+          description: 'File size must be less than 5MB',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setLogoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUploadLogo = async () => {
+    if (!logoFile) {
+      toast({
+        title: 'Error',
+        description: 'No file selected',
+        variant: 'destructive',
+      });
+      return;
+    }
+  
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+  
+      const formData = new FormData();
+      formData.append('logo', logoFile);
+  
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/platform/logo`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+  
+      if (!response.ok) {
+        let errorMessage = `Failed to upload logo: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (jsonError) {
+          errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+  
+      const data = await response.json();
+      console.log('Cloudinary logoUrl:', data.logoUrl); // Debug log
+      setPlatformLogo(data.logoUrl);
+      setLogoFile(null);
+      setLogoPreview(null);
+      toast({
+        title: 'Success',
+        description: 'Platform logo uploaded successfully',
+      });
+    } catch (error) {
+      console.error('Error uploading logo:', error);
+      toast({
+        title: 'Upload Error',
+        description: error.message || 'Failed to upload logo',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteLogo = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+  
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/platform/logo`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+  
+      if (!response.ok) {
+        let errorMessage = `Failed to delete logo: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (jsonError) {
+          errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+  
+      setPlatformLogo(null);
+      setLogoFile(null);
+      setLogoPreview(null);
+      toast({
+        title: 'Success',
+        description: 'Platform logo deleted successfully. Reverted to default.',
+      });
+  
+      // Force favicon update by refreshing the context
+      const { refreshPlatformLogo } = usePlatformLogo();
+      await refreshPlatformLogo();
+      console.log('Favicon should revert to default SVG after delete');
+    } catch (error) {
+      console.error('Error deleting logo:', error);
+      toast({
+        title: 'Delete Error',
+        description: error.message || 'Failed to delete logo',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { id, value } = e.target;
     setUserData((prev) => ({ ...prev, [id]: value }));
   };
 
-  // Handle input changes for password fields
+  const handlePlatformNameChange = (e) => {
+    setPlatformName(e.target.value);
+  };
+
   const handlePasswordChange = (e) => {
     const { id, value } = e.target;
     setPasswordData((prev) => ({ ...prev, [id]: value }));
   };
 
-  // Handle save action for user data (name, email, role)
   const handleSave = async () => {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        console.error('No token found');
-        toast({
-          title: 'Authentication Error',
-          description: 'No authentication token found',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
+        throw new Error('No authentication token found');
       }
 
       if (!userData.id) {
-        console.error('User ID not available');
-        toast({
-          title: 'Error',
-          description: 'User ID not available',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
+        throw new Error('User ID not available');
       }
 
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/${userData.id}`, {
@@ -111,7 +235,7 @@ const Settings = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update user data');
+        throw new Error(errorData.message || `Failed to update user data: ${response.statusText}`);
       }
 
       toast({
@@ -130,53 +254,26 @@ const Settings = () => {
     }
   };
 
-  // Handle password change action
   const handleChangePassword = async () => {
     setIsLoading(true);
     try {
       const { oldPassword, newPassword, confirmPassword } = passwordData;
 
-      // Validate inputs
       if (!oldPassword || !newPassword || !confirmPassword) {
-        toast({
-          title: 'Validation Error',
-          description: 'All password fields are required',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
+        throw new Error('All password fields are required');
       }
 
       if (newPassword !== confirmPassword) {
-        toast({
-          title: 'Validation Error',
-          description: 'New password and confirm password do not match',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
+        throw new Error('New password and confirm password do not match');
       }
 
       if (newPassword.length < 8) {
-        toast({
-          title: 'Validation Error',
-          description: 'New password must be at least 8 characters long',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
+        throw new Error('New password must be at least 8 characters long');
       }
 
       const token = localStorage.getItem('token');
       if (!token) {
-        console.error('No token found');
-        toast({
-          title: 'Authentication Error',
-          description: 'No authentication token found',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
+        throw new Error('No authentication token found');
       }
 
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/change-password`, {
@@ -190,7 +287,7 @@ const Settings = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to change password');
+        throw new Error(errorData.message || `Failed to change password: ${response.statusText}`);
       }
 
       toast({
@@ -198,7 +295,6 @@ const Settings = () => {
         description: 'Your password has been updated successfully',
       });
 
-      // Clear password fields
       setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
     } catch (error) {
       console.error('Error changing password:', error);
@@ -214,7 +310,6 @@ const Settings = () => {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -226,7 +321,6 @@ const Settings = () => {
         </p>
       </motion.div>
 
-      {/* Account Settings */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -259,10 +353,73 @@ const Settings = () => {
               className="bg-glass/50 border-glass-border"
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="platformName">Platform Name</Label>
+            <Input
+              id="platformName"
+              value={platformName}
+              onChange={handlePlatformNameChange}
+              className="bg-glass/50 border-glass-border"
+              placeholder="Enter platform name"
+            />
+          </div>
         </div>
       </motion.div>
 
-      {/* Appearance Settings */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.15 }}
+        className="glass-card p-6"
+      >
+        <div className="flex items-center space-x-3 mb-6">
+          <ImageIcon className="w-5 h-5 text-primary" />
+          <h2 className="text-xl font-semibold">Platform Logo</h2>
+        </div>
+
+        <div className="space-y-4">
+          {platformLogo ? (
+            <div className="flex flex-col items-center space-y-4">
+              <img src={platformLogo} alt="Current Logo" className="w-20 h-20 object-contain rounded" />
+              <Button
+                variant="destructive"
+                onClick={handleDeleteLogo}
+                disabled={isLoading}
+              >
+                Delete Logo (Revert to Default)
+              </Button>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">Using default robot logo</p>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="logo">Upload New Logo</Label>
+            <Input
+              id="logo"
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml"
+              onChange={handleLogoChange}
+              className="bg-glass/50 border-glass-border"
+            />
+          </div>
+
+          {logoPreview && (
+            <div className="flex flex-col items-center space-y-4">
+              <img src={logoPreview} alt="Logo Preview" className="w-20 h-20 object-contain rounded" />
+              <Button
+                onClick={handleUploadLogo}
+                disabled={isLoading}
+                className="bg-gradient-primary text-white"
+              >
+                Upload Logo
+              </Button>
+            </div>
+          )}
+        </div>
+      </motion.div>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -295,7 +452,6 @@ const Settings = () => {
         </div>
       </motion.div>
 
-      {/* Notifications */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -340,7 +496,6 @@ const Settings = () => {
         </div>
       </motion.div>
 
-      {/* Security */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -408,7 +563,6 @@ const Settings = () => {
         </div>
       </motion.div>
 
-      {/* Save Button for User Data */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

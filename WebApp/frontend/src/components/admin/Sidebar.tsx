@@ -1,3 +1,4 @@
+// Sidebar.tsx (updated)
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,23 +12,29 @@ import {
   Menu,
   X,
   LogOut,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/contexts/UserContext';
+import { usePlatformName } from '@/contexts/PlatformNameContext';
+import { usePlatformLogo } from '@/contexts/PlatformLogoContext'; // New context import
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
-  { name: 'Chatbots', href: '/chatbots', icon: Bot, roles: ['ADMIN'] },
-  { name: 'Knowledge Base', href: '/knowledge-base', icon: BookOpen, roles: ['ADMIN'] },
-  { name: 'QR Codes', href: '/qr-codes', icon: QrCode, roles: ['ADMIN'] },
-  { name: 'Chat History', href: '/chat-history', icon: MessageSquare, roles: ['ADMIN'] },
+  { name: 'Chatbots', href: '/chatbots', icon: Bot, roles: ['ADMIN', 'SUB_ADMIN'] },
+  { name: 'Knowledge Base', href: '/knowledge-base', icon: BookOpen, roles: ['ADMIN', 'SUB_ADMIN'] },
+  { name: 'QR Codes', href: '/qr-codes', icon: QrCode, roles: ['ADMIN', 'SUB_ADMIN'] },
+  { name: 'Chat History', href: '/chat-history', icon: MessageSquare, roles: ['ADMIN', 'SUB_ADMIN'] },
+  { name: 'User Management', href: '/users', icon: Users, roles: ['ADMIN'] },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] },
 ];
 
 const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const { user, setUser } = useUser();
+  const { platformName } = usePlatformName();
+  const { platformLogo } = usePlatformLogo(); // Use the new context
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -46,12 +53,28 @@ const Sidebar = () => {
     <div className="h-full glass-card border-r border-glass-border">
       <div className="p-6">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-gradient-primary rounded-xl flex items-center justify-center">
-            <Bot className="w-6 h-6 text-white" />
+          <div key={platformLogo} className="w-10 h-10 bg-gradient-primary rounded-xl flex items-center justify-center">
+            {platformLogo ? (
+              <img src={platformLogo} alt="Platform Logo" className="w-6 h-6 object-contain" />
+            ) : (
+              <Bot className="w-6 h-6 text-white" />
+            )}
           </div>
           <div>
-            <h1 className="text-xl font-bold gradient-text">QR Chat Studio</h1>
-            <p className="text-sm text-muted-foreground">Admin Portal</p>
+            <h1 className="text-xl font-bold gradient-text">{platformName}</h1>
+            <p className="text-sm text-muted-foreground">
+              {user.role === 'ADMIN' ? '' : ''}
+            </p>
+            <div className="flex items-center space-x-2 mt-1">
+              <motion.span
+                className="w-2 h-2 bg-green-500 rounded-full"
+                animate={{ y: [0, -2, 0] }}
+                transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
+              />
+              <p className="text-xs text-muted-foreground">
+                {user.name} ({user.role === 'SUB_ADMIN' ? 'USER' : user.role})
+              </p>
+            </div>
           </div>
         </div>
       </div>

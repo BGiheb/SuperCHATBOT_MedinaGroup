@@ -1,7 +1,8 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/contexts/UserContext';
 
 export interface Document {
   id: number;
@@ -23,6 +24,8 @@ export interface Chatbot {
   documentsCount: number;
   createdAt: string;
   documents?: Document[];
+    qrScans: number;
+
 }
 
 interface ChatbotContextType {
@@ -66,47 +69,56 @@ axios.interceptors.request.use(
 export function ChatbotProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [selectedChatbot, setSelectedChatbot] = React.useState<Chatbot | null>(null);
+  const { user } = useUser();
+  const [selectedChatbot, setSelectedChatbot] = useState<Chatbot | null>(null);
+
+  const fetchChatbots = async (): Promise<Chatbot[]> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.warn('No token found in localStorage');
+      return [];
+    }
+
+    // Use /api/chatbots/my for SUB_ADMIN to fetch only their chatbots
+    const endpoint =
+      user.role === 'SUB_ADMIN' ? `${API_BASE_URL}/api/chatbots/my` : `${API_BASE_URL}/api/chatbots/qr-codes`;
+
+    try {
+      const res = await axios.get<Chatbot[]>(endpoint, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log('Chatbots fetched:', res.data.map(bot => ({
+        id: bot.id,
+        name: bot.name,
+        qrUrl: bot.qrUrl || 'MISSING',
+      })));
+      res.data.forEach(bot => {
+        if (!bot.qrUrl) {
+          console.warn(`Chatbot ${bot.id} (${bot.name}) has no qrUrl`);
+          toast({
+            title: 'Warning',
+            description: `Chatbot ${bot.name} is missing a QR code`,
+            variant: 'destructive',
+          });
+        }
+      });
+      return res.data;
+    } catch (e: any) {
+      console.error('Error fetching chatbots:', e.response?.data || e.message);
+      toast({
+        title: 'Error',
+        description: e.response?.data?.message || 'Failed to fetch chatbots',
+        variant: 'destructive',
+      });
+      throw e;
+    }
+  };
 
   const { data: chatbots = [], isLoading, error } = useQuery<Chatbot[]>({
     queryKey: ['chatbots'],
-    queryFn: async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn('No token found in localStorage');
-        return [];
-      }
-      try {
-        const res = await axios.get<Chatbot[]>(`${API_BASE_URL}/api/chatbots/qr-codes`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        console.log('Chatbots fetched:', res.data.map(bot => ({
-          id: bot.id,
-          name: bot.name,
-          qrUrl: bot.qrUrl || 'MISSING',
-        })));
-        res.data.forEach(bot => {
-          if (!bot.qrUrl) {
-            console.warn(`Chatbot ${bot.id} (${bot.name}) has no qrUrl`);
-            toast({
-              title: 'Warning',
-              description: `Chatbot ${bot.name} is missing a QR code`,
-              variant: 'destructive',
-            });
-          }
-        });
-        return res.data;
-      } catch (e: any) {
-        console.error('Error fetching chatbots:', e.response?.data || e.message);
-        toast({
-          title: 'Error',
-          description: e.response?.data?.message || 'Failed to fetch chatbots',
-          variant: 'destructive',
-        });
-        throw e;
-      }
-    },
+    queryFn: fetchChatbots,
     retry: false,
+    enabled: user.id !== 0 && (user.role === 'ADMIN' || user.role === 'SUB_ADMIN'),
   });
 
   const addChatbot = async (
@@ -159,21 +171,16 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateChatbot = async (
-    id: number | string,
+    id: number,
     updates: Partial<Chatbot> & { logoFile?: File; documents?: File[] }
   ) => {
     try {
-      const chatbotId = parseInt(id as string, 10);
-      if (!chatbotId || isNaN(chatbotId)) {
-        throw new Error(`ID de chatbot invalide : ${id}`);
-      }
-      console.log('Mise à jour du chatbot ID:', chatbotId);
+      if (!id || isNaN(id)) throw new Error(`Invalid chatbot ID: ${id}`);
+      console.log('Updating chatbot ID:', id);
       console.log('Updates object:', JSON.stringify(updates, null, 2));
 
       const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error("Aucun token d'authentification trouvé");
-      }
+      if (!token) throw new Error('No authentication token found');
 
       const formData = new FormData();
       const formDataEntries: { key: string; value: string | File }[] = [];
@@ -188,7 +195,7 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
       }
       if (updates.logoFile) {
         if (!(updates.logoFile instanceof File)) {
-          throw new Error('Le logo doit être un fichier valide');
+          throw new Error('Logo must be a valid file');
         }
         formData.append('logo', updates.logoFile);
         formDataEntries.push({ key: 'logo', value: updates.logoFile });
@@ -208,7 +215,7 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
       if (updates.documents && updates.documents.length > 0) {
         updates.documents.forEach((file, index) => {
           if (!(file instanceof File)) {
-            throw new Error(`Document ${index + 1} n'est pas un fichier valide`);
+            throw new Error(`Document ${index + 1} is not a valid file`);
           }
           formData.append('documents', file);
           formDataEntries.push({ key: `documents[${index}]`, value: file });
@@ -218,7 +225,7 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
       console.log('FormData contents:', JSON.stringify(formDataEntries, null, 2));
 
       const res = await axios.put<Chatbot & { hasChanges: boolean }>(
-        `${API_BASE_URL}/api/chatbots/${chatbotId}`,
+        `${API_BASE_URL}/api/chatbots/${id}`,
         formData,
         {
           headers: {
@@ -227,16 +234,26 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
           },
         }
       );
-      console.log('Réponse de l\'API:', res.data);
+      console.log('API response:', res.data);
 
       queryClient.setQueryData<Chatbot[]>(['chatbots'], (old = []) =>
-        old.map((bot) => (bot.id === chatbotId ? res.data : bot))
+        old.map((bot) => (bot.id === id ? res.data : bot))
       );
-      queryClient.invalidateQueries({ queryKey: ['documents', chatbotId] });
+      queryClient.invalidateQueries({ queryKey: ['documents', id] });
+
+      toast({
+        title: 'Chatbot updated',
+        description: `Chatbot ${res.data.name} has been updated successfully.`,
+      });
 
       return res.data;
     } catch (e: any) {
-      console.error('Erreur lors de la mise à jour du chatbot:', e.message, e.stack);
+      console.error('Error updating chatbot:', e.response?.data || e.message);
+      toast({
+        title: 'Error',
+        description: e.response?.data?.message || 'Failed to update chatbot',
+        variant: 'destructive',
+      });
       throw e;
     }
   };
@@ -336,12 +353,6 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
     setSelectedChatbot(chatbot);
   };
 
-  if (isLoading) return <div>Loading chatbots...</div>;
-  if (error) {
-    console.error('Chatbot loading error:', error);
-    return <div>Error loading chatbots: {error.message}</div>;
-  }
-
   return (
     <ChatbotContext.Provider
       value={{
@@ -355,6 +366,16 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
         replaceDocument,
       }}
     >
+      {isLoading && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="text-white">Loading chatbots...</div>
+        </div>
+      )}
+      {error && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="text-white">Error loading chatbots: {error.message}</div>
+        </div>
+      )}
       {children}
     </ChatbotContext.Provider>
   );

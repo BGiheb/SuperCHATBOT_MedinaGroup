@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { User } from '@/types/user';
 
 interface ProtectedRouteProps {
-  allowedRoles: ('ADMIN' | 'USER')[];
+  allowedRoles: ('ADMIN' | 'SUB_ADMIN' | 'USER')[];
 }
 
 const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
@@ -25,7 +25,6 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
         const token = localStorage.getItem('token');
         if (!token) {
           setIsAuthenticated(false);
-          setUser({ id: 0, name: '', email: '', role: 'USER' });
           return;
         }
 
@@ -39,11 +38,16 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
           throw new Error('Invalid token');
         }
 
+        const data = await response.json();
+        setUser({ id: data.id, name: data.name || '', email: data.email || '', role: data.role || 'USER' });
         setIsAuthenticated(true);
       } catch (error) {
         console.error('Error verifying token:', error);
         setIsAuthenticated(false);
-        setUser({ id: 0, name: '', email: '', role: 'USER' });
+        // Only update user state if not already in default state to avoid unnecessary re-renders
+        if (user.id !== 0 || user.name !== '' || user.email !== '' || user.role !== 'USER') {
+          setUser({ id: 0, name: '', email: '', role: 'USER' });
+        }
         toast({
           title: 'Authentication Error',
           description: 'Please log in to continue',
@@ -61,7 +65,7 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     return () => {
       isMounted.current = false;
     };
-  }, [setUser]); // Removed toast from dependencies
+  }, [setUser]); // Removed toast from dependencies to prevent re-runs
 
   if (isLoading) {
     return <div>Loading...</div>;
@@ -77,6 +81,7 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
       description: 'You do not have permission to access this page',
       variant: 'destructive',
     });
+    // Redirect sub-admins to their first chatbot or not-authorized if none exist
     const chatbotId = chatbots && chatbots.length > 0 ? chatbots[0].id : null;
     return <Navigate to={chatbotId ? `/c/${chatbotId}` : '/not-authorized'} replace />;
   }

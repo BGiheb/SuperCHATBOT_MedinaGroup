@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -10,6 +9,7 @@ datasource db {
 
 enum Role {
   ADMIN
+  SUB_ADMIN
   USER
 }
 
@@ -20,6 +20,9 @@ model User {
   name          String?
   role          Role          @default(USER)
   isAnonymous   Boolean       @default(false)
+  createdById   Int?          // Tracks who created this user (for SUB_ADMIN)
+  createdBy     User?         @relation("CreatedUsers", fields: [createdById], references: [id])
+  createdUsers  User[]        @relation("CreatedUsers") // Admins can create sub-admins
   chatbots      Chatbot[]
   conversations Conversation[]
   sessions      Session[]
@@ -39,11 +42,11 @@ model Chatbot {
   conversations Conversation[]
   sessions      Session[]
   qrScans       QRScan[]
+  qrScanCount   Int           @default(0)
   createdAt     DateTime      @default(now())
   isActive      Boolean       @default(true)
   primaryColor  String?
 }
-
 model Document {
   id         Int      @id @default(autoincrement())
   fileName   String

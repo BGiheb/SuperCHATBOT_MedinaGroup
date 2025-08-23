@@ -39,6 +39,9 @@ const PublicChat = () => {
   const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Speech Recognition setup
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
   // Retrieve or store userId in localStorage for anonymous users
   const [userId, setUserId] = useState<string | null>(
     localStorage.getItem(`chatbot_${chatbotId}_userId`)
@@ -52,6 +55,46 @@ const PublicChat = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Initialize Speech Recognition
+  useEffect(() => {
+    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false; // Stop after one utterance
+      recognitionRef.current.interimResults = true; // Show interim results
+      recognitionRef.current.lang = 'en-US'; // Set language (adjust as needed)
+
+      recognitionRef.current.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map((result) => result[0].transcript)
+          .join('');
+        setInputValue(transcript);
+      };
+
+      recognitionRef.current.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsRecording(false);
+        toast({
+          title: 'Speech Recognition Error',
+          description: `Error: ${event.error}. Please try again.`,
+          variant: 'destructive',
+        });
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsRecording(false);
+      };
+    } else {
+      console.warn('Speech Recognition API not supported in this browser.');
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, [toast]);
 
   // Function to end the session
   const endSession = async () => {
@@ -87,20 +130,17 @@ const PublicChat = () => {
   // Fetch chatbot and conversation history
   const fetchChatbotAndConversations = async () => {
     try {
-      // Fetch chatbot data
       const chatbotResponse = await axios.get(
         `${import.meta.env.VITE_API_BASE_URL}/api/chatbots/${chatbotId}`
       );
       const chatbotData = chatbotResponse.data;
       setChatbot(chatbotData);
 
-      // Store userId if not already stored
       if (!userId) {
         setUserId(chatbotData.userId.toString());
         localStorage.setItem(`chatbot_${chatbotId}_userId`, chatbotData.userId.toString());
       }
 
-      // Fetch conversation history
       const historyResponse = await axios.get(
         `${import.meta.env.VITE_API_BASE_URL}/api/chatbots/${chatbotId}/conversations`,
         {
@@ -122,7 +162,6 @@ const PublicChat = () => {
         },
       ]).filter(Boolean);
 
-      // Initialize with welcome message if no history
       if (historyMessages.length === 0) {
         historyMessages.push({
           id: '1',
@@ -202,10 +241,22 @@ const PublicChat = () => {
   };
 
   const handleVoiceToggle = () => {
-    setIsRecording(!isRecording);
-    // Mock voice recording
-    if (!isRecording) {
-      setTimeout(() => setIsRecording(false), 3000);
+    if (!recognitionRef.current) {
+      toast({
+        title: 'Speech Recognition Not Supported',
+        description: 'Your browser does not support speech recognition. Please type your message.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (isRecording) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    } else {
+      setIsRecording(true);
+      setInputValue(''); // Clear input before starting
+      recognitionRef.current.start();
     }
   };
 
@@ -323,8 +374,8 @@ const PublicChat = () => {
       </motion.header>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-hidden flex flex-col max-w-4xl mx-auto w-full">
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full relative">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 mb-24">
           <AnimatePresence>
             {messages.map((message) => (
               <ChatMessage
@@ -342,13 +393,12 @@ const PublicChat = () => {
 
         {/* Input Area */}
         <motion.div
-          className="p-4 glass-card border-t border-glass-border sticky bottom-0 z-20 backdrop-blur-xl"
+          className="p-4 glass-card border-t border-glass-border fixed bottom-0 left-0 right-0 z-20 backdrop-blur-xl max-w-4xl mx-auto"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.3, delay: 0.1 }}
         >
           <div className="flex items-end space-x-2 max-w-4xl mx-auto">
-            {/* Attachment button */}
             <motion.button
               className="w-10 h-10 rounded-xl glass-card flex items-center justify-center mb-2"
               whileHover={{ scale: 1.1 }}
@@ -358,18 +408,16 @@ const PublicChat = () => {
               <Paperclip className="w-4 h-4 text-muted-foreground" />
             </motion.button>
 
-            {/* Message input */}
             <div className="flex-1 relative">
               <Input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Type your message..."
+                placeholder="Type or speak your message..."
                 className="bg-glass/50 border-glass-border pr-12 h-12 text-base rounded-2xl focus:ring-2 focus:ring-primary/50 transition-all duration-200"
                 style={{ paddingRight: '3rem' }}
               />
 
-              {/* Voice input button */}
               <motion.button
                 onClick={handleVoiceToggle}
                 className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
@@ -386,7 +434,6 @@ const PublicChat = () => {
               </motion.button>
             </div>
 
-            {/* Send button */}
             <motion.div
               className="relative overflow-hidden"
               whileHover={{ scale: 1.05 }}

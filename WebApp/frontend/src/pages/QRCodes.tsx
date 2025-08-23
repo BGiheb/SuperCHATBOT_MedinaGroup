@@ -1,21 +1,24 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { QrCode, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useQuery, useQueryClient } from '@tanstack/react-query'; // Ajouter useQueryClient
-import axios from 'axios';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import QRCard from '@/components/qr-codes/QRCard';
 import { User } from '@/types/user';
 import { Chatbot } from '@/types/chatbot';
-import { useState, useEffect } from 'react'; // Ajouter useEffect
+import { useState, useEffect } from 'react';
+import { useChatbots } from '@/contexts/ChatbotContext';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 
 const QRCodes = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const queryClient = useQueryClient(); // Ajouter queryClient
+  const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
+  const { chatbots, isLoading: chatbotsLoading } = useChatbots(); // Use context
 
   // Fetch user role
   const { data: user, isLoading: userLoading, error: userError } = useQuery<User | null>({
@@ -33,34 +36,33 @@ const QRCodes = () => {
         return res.data;
       } catch (e: any) {
         console.error('Error fetching user:', e.response?.data || e.message);
-        throw e;
+        return null;
       }
     },
     retry: false,
   });
 
-  // Fetch QR codes
-  const { data: chatbots = [], isLoading, error } = useQuery<Chatbot[]>({
-    queryKey: ['chatbots'],
-    queryFn: async () => {
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error('No token');
-      const res = await axios.get<Chatbot[]>(`${import.meta.env.VITE_API_BASE_URL}/api/chatbots`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return res.data;
-    },
-    retry: false,
-    enabled: !!user,
-  });
-
-  // Mettre à jour la page courante lorsque la liste des chatbots change
+  // Handle page updates when chatbots change
   useEffect(() => {
+    if (chatbots.length === 0) return;
     const totalPages = Math.ceil(chatbots.length / itemsPerPage);
-    if (chatbots.length > 0 && currentPage > totalPages) {
-      setCurrentPage(totalPages); // Ajuster la page si elle dépasse le total
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
     }
   }, [chatbots.length, currentPage, itemsPerPage]);
+
+  // Handle chatbot cache updates
+  useEffect(() => {
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] === 'chatbots' && event.type === 'updated') {
+        const totalPages = Math.ceil((event.query.state.data?.length || 0) / itemsPerPage);
+        if (totalPages > 0 && currentPage !== totalPages) {
+          setCurrentPage(totalPages);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [queryClient, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(chatbots.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -70,23 +72,7 @@ const QRCodes = () => {
     setCurrentPage(page);
   };
 
-  // Fonction pour naviguer vers la dernière page après ajout
-  const handleChatbotAdded = () => {
-    const totalPages = Math.ceil(chatbots.length / itemsPerPage);
-    setCurrentPage(totalPages); // Aller à la dernière page
-  };
-
-  // Écouter les mises à jour du cache des chatbots
-  useEffect(() => {
-    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (event.query.queryKey[0] === 'chatbots' && event.type === 'updated') {
-        handleChatbotAdded();
-      }
-    });
-    return () => unsubscribe();
-  }, [queryClient]);
-
-  if (userLoading || isLoading) {
+  if (userLoading || chatbotsLoading) {
     return (
       <motion.div
         className="text-center py-12"
@@ -106,9 +92,8 @@ const QRCodes = () => {
     );
   }
 
-  if (userError || error) {
-    const errorMessage = userError?.message || error?.message || 'Failed to load QR codes';
-    console.error('Error in QRCodes:', errorMessage);
+  if (userError) {
+    const errorMessage = userError.message || 'Failed to load user data';
     toast({
       title: 'Error',
       description: errorMessage,
@@ -128,7 +113,23 @@ const QRCodes = () => {
   }
 
   if (!user) {
-    return null;
+    return (
+      <motion.div
+        className="text-center py-12 glass-card"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        <h3 className="text-xl font-semibold mb-2">Error</h3>
+        <p className="text-muted-foreground">Please log in to view QR codes.</p>
+        <Button
+          className="mt-4 bg-gradient-primary hover:scale-105 transition-transform duration-200"
+          onClick={() => navigate('/login')}
+        >
+          Log In
+        </Button>
+      </motion.div>
+    );
   }
 
   return (

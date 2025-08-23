@@ -8,5 +8,7 @@ export interface Chatbot {
   description?: string;
   documentsCount: number;
   createdAt: string;
+    qrScans: number;
+
   
 }

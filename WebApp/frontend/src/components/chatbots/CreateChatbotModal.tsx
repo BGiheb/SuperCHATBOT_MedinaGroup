@@ -221,12 +221,12 @@ const CreateChatbotModal = ({ open, onOpenChange }: CreateChatbotModalProps) => 
 
             {/* Description */}
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">Message de bienvenue</Label>
               <Textarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe what your chatbot does..."
+                placeholder="Personaliser votre message de bienvenue..."
                 className="bg-glass/50 border-glass-border resize-none"
                 rows={3}
               />
