@@ -12,8 +12,14 @@ exports.getDocumentsByChatbot = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid chatbotId' });
     }
 
+    // Allow admins to access any chatbot, others must be owners
+    const whereClause =
+      req.user.role === 'ADMIN'
+        ? { id: chatbotId }
+        : { id: chatbotId, ownerId: req.user.id };
+
     const chatbot = await prisma.chatbot.findFirst({
-      where: { id: chatbotId, ownerId: req.user.id },
+      where: whereClause,
     });
     if (!chatbot) {
       return res.status(403).json({ message: 'Unauthorized or chatbot not found' });
@@ -31,7 +37,7 @@ exports.getDocumentsByChatbot = async (req, res, next) => {
       },
     });
 
-    console.log(`Fetched ${documents.length} documents for chatbot ${chatbotId}`);
+    console.log(`Fetched ${documents.length} documents for chatbot ${chatbotId} by user ${req.user.id} (${req.user.role})`);
     return res.status(200).json(documents);
   } catch (error) {
     console.error('Error fetching documents:', error.message, error.stack);
@@ -46,8 +52,14 @@ exports.uploadDocument = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid chatbotId' });
     }
 
+    // Allow admins to upload to any chatbot, others must be owners
+    const whereClause =
+      req.user.role === 'ADMIN'
+        ? { id: parseInt(chatbotId) }
+        : { id: parseInt(chatbotId), ownerId: req.user.id };
+
     const chatbot = await prisma.chatbot.findFirst({
-      where: { id: parseInt(chatbotId), ownerId: req.user.id },
+      where: whereClause,
       include: { documents: true },
     });
     if (!chatbot) {
@@ -116,7 +128,7 @@ exports.uploadDocument = async (req, res, next) => {
     // Clean up temporary file
     await fs.unlink(file.path).catch((err) => console.error('Error deleting document file:', err));
 
-    console.log(`Uploaded document ${document.id} for chatbot ${chatbotId} with fileType: ${fileType}`);
+    console.log(`Uploaded document ${document.id} for chatbot ${chatbotId} by user ${req.user.id} (${req.user.role})`);
     res.status(201).json({
       ...document,
       documentsCount: chatbot.documents.length + 1,
@@ -135,11 +147,17 @@ exports.replaceDocument = async (req, res, next) => {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
+    // Allow admins to replace documents for any chatbot, others must be owners
+    const whereClause =
+      req.user.role === 'ADMIN'
+        ? { id: parseInt(id) }
+        : { id: parseInt(id), chatbot: { ownerId: req.user.id } };
+
     const document = await prisma.document.findFirst({
-      where: { id: parseInt(id) },
+      where: whereClause,
       include: { chatbot: { include: { documents: true } } },
     });
-    if (!document || document.chatbot.ownerId !== req.user.id) {
+    if (!document) {
       return res.status(403).json({ message: 'Unauthorized or document not found' });
     }
 
@@ -197,7 +215,7 @@ exports.replaceDocument = async (req, res, next) => {
     // Clean up temporary file
     await fs.unlink(file.path).catch((err) => console.error('Error deleting document file:', err));
 
-    console.log(`Replaced document ${id} with fileType: ${fileType}`);
+    console.log(`Replaced document ${id} for chatbot ${document.chatbotId} by user ${req.user.id} (${req.user.role})`);
     res.status(200).json({
       ...updatedDocument,
       documentsCount: document.chatbot.documents.length,
@@ -263,11 +281,18 @@ exports.deleteDocument = async (req, res, next) => {
 exports.downloadDocument = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    // Allow admins to download documents for any chatbot, others must be owners
+    const whereClause =
+      req.user.role === 'ADMIN'
+        ? { id: parseInt(id) }
+        : { id: parseInt(id), chatbot: { ownerId: req.user.id } };
+
     const document = await prisma.document.findFirst({
-      where: { id: parseInt(id) },
+      where: whereClause,
       include: { chatbot: { include: { documents: true } } },
     });
-    if (!document || document.chatbot.ownerId !== req.user.id) {
+    if (!document) {
       return res.status(403).json({ message: 'Unauthorized or document not found' });
     }
 

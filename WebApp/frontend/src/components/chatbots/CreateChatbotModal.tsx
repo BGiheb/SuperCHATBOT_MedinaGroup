@@ -32,6 +32,7 @@ const colorOptions = [
 const CreateChatbotModal = ({ open, onOpenChange }: CreateChatbotModalProps) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [instructions, setInstructions] = useState('');
   const [logo, setLogo] = useState('🤖');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [documents, setDocuments] = useState<File[]>([]);
@@ -115,6 +116,7 @@ const CreateChatbotModal = ({ open, onOpenChange }: CreateChatbotModalProps) => 
         {
           name,
           description,
+          instructions,
           logo: logoFile ? '' : logo,
           primaryColor,
           isActive: true,
@@ -127,8 +129,10 @@ const CreateChatbotModal = ({ open, onOpenChange }: CreateChatbotModalProps) => 
         description: `${name} has been successfully created with ${documents.length} document(s).`,
       });
 
+      // Réinitialiser les champs
       setName('');
       setDescription('');
+      setInstructions('');
       setLogo('🤖');
       setLogoFile(null);
       setDocuments([]);
@@ -232,6 +236,19 @@ const CreateChatbotModal = ({ open, onOpenChange }: CreateChatbotModalProps) => 
               />
             </div>
 
+            {/* Instructions */}
+            <div className="space-y-2">
+              <Label htmlFor="instructions">Instructions personnalisées</Label>
+              <Textarea
+                id="instructions"
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                placeholder="Entrez des instructions pour personnaliser les réponses du chatbot (ex: 'Réponds toujours en français avec un ton amical.')"
+                className="bg-glass/50 border-glass-border resize-none"
+                rows={4}
+              />
+            </div>
+
             {/* Document Upload */}
             <div className="space-y-2">
               <Label htmlFor="documents">Documents (PDF, TXT, PNG, JPEG)</Label>
@@ -330,6 +347,9 @@ const CreateChatbotModal = ({ open, onOpenChange }: CreateChatbotModalProps) => 
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {documents.length} document(s) attached
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Instructions: {instructions || 'Aucune instruction spécifiée'}
                     </p>
                   </div>
                 </div>

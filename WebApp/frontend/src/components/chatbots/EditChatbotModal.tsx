@@ -1,3 +1,4 @@
+// components/EditChatbotModal.tsx
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { X, Upload, Palette, Trash2, FileText, Type, Image, PaletteIcon, File, ToggleLeft, Bot } from 'lucide-react';
@@ -31,6 +32,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
   const { toast } = useToast();
   const [name, setName] = useState(chatbot.name);
   const [description, setDescription] = useState(chatbot.description || '');
+  const [instructions, setInstructions] = useState(chatbot.instructions || ''); // Ajout du state pour instructions
   const [primaryColor, setPrimaryColor] = useState(chatbot.primaryColor || '#3b82f6');
   const [logo, setLogo] = useState(chatbot.logo || '🤖');
   const [isActive, setIsActive] = useState(chatbot.isActive);
@@ -42,17 +44,18 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
 
-  // Enhanced logo URL validation
+  // Validation de l'URL du logo
   const isValidImageUrl = (url: string) => {
     return url && (url.startsWith('http://') || url.startsWith('https://')) && /\.(png|jpg|jpeg)$/i.test(url);
   };
   const isLogoUrl = isValidImageUrl(logo);
 
   useEffect(() => {
-    // Reset form fields and documents when modal opens or chatbot changes
+    // Réinitialisation des champs du formulaire et des documents lorsque le modal s'ouvre ou que le chatbot change
     console.log('Resetting form fields for chatbot:', { id: chatbot.id, name: chatbot.name, logo: chatbot.logo });
     setName(chatbot.name);
     setDescription(chatbot.description || '');
+    setInstructions(chatbot.instructions || ''); // Réinitialisation des instructions
     setPrimaryColor(chatbot.primaryColor || '#3b82f6');
     setLogo(chatbot.logo || '🤖');
     setIsActive(chatbot.isActive);
@@ -78,6 +81,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
         setExistingDocuments(fetchedChatbot.documents || []);
         setName(fetchedChatbot.name);
         setDescription(fetchedChatbot.description || '');
+        setInstructions(fetchedChatbot.instructions || ''); // Mise à jour des instructions
         setPrimaryColor(fetchedChatbot.primaryColor || '#3b82f6');
         setLogo(fetchedChatbot.logo || '🤖');
         setIsActive(fetchedChatbot.isActive);
@@ -102,6 +106,14 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (instructions.length > 1000) {
+      toast({
+        title: 'Erreur',
+        description: 'Les instructions ne doivent pas dépasser 1000 caractères',
+        variant: 'destructive',
+      });
+      return;
+    }
     setIsSubmitting(true);
 
     try {
@@ -112,6 +124,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
       const updates: Partial<Chatbot> & { logoFile?: File; documents?: File[] } = {
         name,
         description,
+        instructions, // Ajout des instructions dans les mises à jour
         primaryColor,
         logo,
         isActive,
@@ -128,6 +141,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
       const hasChanges =
         name !== chatbot.name ||
         description !== (chatbot.description || '') ||
+        instructions !== (chatbot.instructions || '') || // Vérification des modifications des instructions
         primaryColor !== (chatbot.primaryColor || '#3b82f6') ||
         logo !== (chatbot.logo || '🤖') ||
         isActive !== chatbot.isActive ||
@@ -163,11 +177,29 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
     if (!files) return;
 
     if (type === 'logo') {
-      setLogoFile(files[0] || null);
-      setLogo(files[0] ? URL.createObjectURL(files[0]) : chatbot.logo || '🤖');
-      console.log('Logo file selected:', files[0]?.name);
+      const file = files[0];
+      if (file && !['image/png', 'image/jpeg'].includes(file.type)) {
+        toast({
+          title: 'Erreur',
+          description: 'Le logo doit être une image PNG ou JPEG',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setLogoFile(file || null);
+      setLogo(file ? URL.createObjectURL(file) : chatbot.logo || '🤖');
+      console.log('Logo file selected:', file?.name);
     } else {
-      const newFiles = Array.from(files);
+      const newFiles = Array.from(files).filter((file) =>
+        ['application/pdf', 'text/plain'].includes(file.type)
+      );
+      if (newFiles.length !== files.length) {
+        toast({
+          title: 'Erreur',
+          description: 'Seuls les fichiers PDF et TXT sont autorisés',
+          variant: 'destructive',
+        });
+      }
       setDocumentFiles((prev) => [...prev, ...newFiles]);
       console.log('Document files selected:', newFiles.map(f => f.name));
     }
@@ -193,7 +225,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="glass-card border-glass-border max-w-2xl" aria-describedby="edit-chatbot-description">
         <div id="edit-chatbot-description" className="sr-only">
-          Modifier les paramètres du chatbot, y compris le nom, la description, la couleur principale, le logo, les documents et le statut actif.
+          Modifier les paramètres du chatbot, y compris le nom, la description, les instructions, la couleur principale, le logo, les documents et le statut actif.
         </div>
         <div className="flex">
           <div className="w-48 bg-glass/20 border-r border-glass-border p-4 flex flex-col space-y-2">
@@ -213,6 +245,14 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
             >
               <FileText className="w-4 h-4 mr-2" />
               Msg Bienvenue
+            </Button>
+            <Button
+              variant="ghost"
+              className="justify-start text-sm"
+              onClick={() => scrollToSection('instructions-section')}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Instructions
             </Button>
             <Button
               variant="ghost"
@@ -261,6 +301,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Entrez le nom du chatbot"
                   required
+                  className="bg-glass/50 border-glass-border"
                 />
               </div>
 
@@ -271,8 +312,24 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Modifiez le message de bienvenue"
+                  className="bg-glass/50 border-glass-border resize-none"
                   rows={4}
                 />
+              </div>
+
+              <div id="instructions-section" className="space-y-2">
+                <Label htmlFor="instructions">Instructions personnalisées</Label>
+                <Textarea
+                  id="instructions"
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)}
+                  placeholder="Entrez des instructions pour personnaliser les réponses du chatbot (ex: 'Réponds toujours en français avec un ton amical.')"
+                  className="bg-glass/50 border-glass-border resize-none"
+                  rows={4}
+                />
+                <p className="text-sm text-muted-foreground">
+                  {instructions.length}/1000 caractères
+                </p>
               </div>
 
               <div id="color-section" className="space-y-2">
@@ -283,7 +340,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
                     value={primaryColor}
                     onChange={(e) => setPrimaryColor(e.target.value)}
                     placeholder="#3b82f6"
-                    className="w-32"
+                    className="w-32 bg-glass/50 border-glass-border"
                   />
                   <Button
                     type="button"
@@ -381,7 +438,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
                 <Input
                   id="documents"
                   type="file"
-                  accept=".pdf,.txt"
+                  accept="application/pdf,text/plain"
                   multiple
                   onChange={(e) => handleFileChange(e, 'documents')}
                   className="bg-glass/50 border-glass-border"

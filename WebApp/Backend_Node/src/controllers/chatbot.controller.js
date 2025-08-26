@@ -779,31 +779,37 @@ exports.getConversations = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid or missing chatbot ID or user ID' });
     }
 
+    // Check if chatbot exists and is active
     const bot = await prisma.chatbot.findUnique({
       where: { id: chatbotId, isActive: true },
-      include: { owner: { select: { name: true } } },
+      select: { id: true }, // Minimal selection for performance
     });
     if (!bot) {
       return res.status(404).json({ message: 'Chatbot not found or inactive' });
     }
 
+    // Fetch conversations
     const conversations = await prisma.conversation.findMany({
       where: {
         chatbotId,
         userId,
+      },
+      select: {
+        id: true,
+        question: true,
+        answer: true,
+        createdAt: true,
       },
       orderBy: {
         createdAt: 'asc',
       },
     });
 
-    res.json({
-      conversations,
-      createdBy: bot.owner?.name || 'Unknown',
-    });
+    console.log(`Fetched ${conversations.length} conversations for chatbot ${chatbotId} and user ${userId}`);
+    res.json(conversations); // Return array directly
   } catch (e) {
-    console.error('Error in getConversations:', e);
-    next(e);
+    console.error('Error in getConversations:', e.message, e.stack);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 

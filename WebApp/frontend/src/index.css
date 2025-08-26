@@ -68,24 +68,24 @@
 
   .light {
     --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --foreground: 0 0% 0%; /* Black for high contrast */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 0 0% 0%;
     --glass: 0 0% 95%;
     --glass-border: 0 0% 85%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover-foreground: 0 0% 0%;
     --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    --secondary-foreground: 0 0% 0%;
     --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    --muted-foreground: 0 0% 0%; /* Changed to black for better contrast in light mode */
     --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --accent-foreground: 0 0% 0%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
     --ring: 221 83% 53%;
-    --gradient-glass: linear-gradient(135deg, hsla(var(--glass), 0.8), hsla(var(--glass), 0.4));
-    --shadow-glass: 0 8px 32px hsla(240, 10%, 0%, 0.1);
+    --gradient-glass: linear-gradient(135deg, hsla(0, 0%, 95%, 0.9), hsla(0, 0%, 95%, 0.7)); /* Slightly less transparent */
+    --shadow-glass: 0 8px 32px hsla(240, 10%, 0%, 0.15); /* Softer shadow for light mode */
   }
 }
 
@@ -101,6 +101,21 @@
       radial-gradient(circle at 20% 50%, hsla(var(--primary-start), 0.1) 0%, transparent 50%),
       radial-gradient(circle at 80% 20%, hsla(var(--primary-end), 0.1) 0%, transparent 50%),
       radial-gradient(circle at 40% 80%, hsla(var(--neon-cyan), 0.05) 0%, transparent 50%);
+  }
+
+  /* Ensure sidebar text is bold in light mode */
+  .light .glass-card {
+    @apply font-bold text-black; /* Black and bold text for all elements inside glass-card */
+    background: linear-gradient(135deg, hsla(0, 0%, 95%, 0.9), hsla(0, 0%, 95%, 0.7)); /* Slightly more opaque */
+  }
+
+  /* Override gradient-text in light mode for readability */
+  .light .gradient-text {
+    @apply text-black font-bold;
+    -webkit-text-fill-color: hsl(0, 0%, 0%); /* Fallback to solid black */
+    background: none;
+    background-clip: initial;
+    -webkit-background-clip: initial;
   }
 
   /* Glass morphism utilities */

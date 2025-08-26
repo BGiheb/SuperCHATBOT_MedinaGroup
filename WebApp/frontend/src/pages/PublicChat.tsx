@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Bot, Paperclip, Mic, MoreVertical } from 'lucide-react';
+import { Send, Bot, Paperclip, Mic, MoreVertical, RefreshCcw } from 'lucide-react'; // Added RefreshCcw icon
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -61,9 +61,9 @@ const PublicChat = () => {
     if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false; // Stop after one utterance
-      recognitionRef.current.interimResults = true; // Show interim results
-      recognitionRef.current.lang = 'en-US'; // Set language (adjust as needed)
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = 'en-US';
 
       recognitionRef.current.onresult = (event) => {
         const transcript = Array.from(event.results)
@@ -147,7 +147,15 @@ const PublicChat = () => {
           params: { userId: userId || chatbotData.userId },
         }
       );
-      const historyMessages = historyResponse.data.flatMap((conv: any) => [
+
+      const conversations = Array.isArray(historyResponse.data)
+        ? historyResponse.data
+        : [];
+      if (!Array.isArray(historyResponse.data)) {
+        console.warn('Expected array for conversation history, received:', historyResponse.data);
+      }
+
+      const historyMessages = conversations.flatMap((conv: any) => [
         {
           id: conv.id.toString(),
           content: conv.question,
@@ -171,15 +179,56 @@ const PublicChat = () => {
         });
       }
       setMessages(historyMessages);
-    } catch (error) {
-      console.error('Error fetching chatbot or conversations:', error);
+    } catch (error: any) {
+      console.error('Error fetching chatbot or conversations:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      let errorMessage = 'Failed to load chatbot or conversation history. Please try again.';
+      if (error.response?.status === 400) {
+        errorMessage = 'Invalid chatbot or user ID.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Chatbot not found or inactive.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
       toast({
         title: 'Error',
-        description: 'Failed to load chatbot or conversation history. Please try again.',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Function to start a new chat
+  const startNewChat = async () => {
+    try {
+      // End the current session
+      await endSession();
+
+      // Clear messages and reset userId
+      setMessages([]);
+      setUserId(null);
+      localStorage.removeItem(`chatbot_${chatbotId}_userId`);
+
+      // Fetch chatbot data and start a new session
+      await fetchChatbotAndConversations();
+
+      toast({
+        title: 'New Chat Started',
+        description: 'Your conversation has been reset.',
+        variant: 'default',
+      });
+    } catch (error) {
+      console.error('Error starting new chat:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to start a new chat. Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -255,7 +304,7 @@ const PublicChat = () => {
       setIsRecording(false);
     } else {
       setIsRecording(true);
-      setInputValue(''); // Clear input before starting
+      setInputValue('');
       recognitionRef.current.start();
     }
   };
@@ -347,6 +396,16 @@ const PublicChat = () => {
           </div>
 
           <div className="flex items-center space-x-2">
+            <motion.button
+              onClick={startNewChat} // Added New Chat button
+              className="w-8 h-8 rounded-lg glass-card flex items-center justify-center"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              title="Start New Chat"
+            >
+              <RefreshCcw className="w-4 h-4" />
+            </motion.button>
+
             <motion.button
               onClick={toggleTheme}
               className="w-8 h-8 rounded-lg glass-card flex items-center justify-center"

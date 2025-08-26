@@ -26,8 +26,8 @@ interface Chatbot {
   createdAt: string;
   documentsCount: number;
   qrScans: number;
-  conversationsCount: number; // Added conversationsCount
-  createdBy?: string; // Nom du créateur (admin ou utilisateur)
+  conversationsCount: number;
+  createdBy?: string;
 }
 
 interface ChatbotCardProps {
@@ -35,7 +35,7 @@ interface ChatbotCardProps {
 }
 
 const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
-  console.log(`Chatbot ${chatbot.id} - qrScans:`, chatbot.qrScans); // Log pour débogage
+  console.log(`Chatbot ${chatbot.id} - qrScans:`, chatbot.qrScans);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
@@ -60,7 +60,21 @@ const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
     setIsEditModalOpen(true);
   };
 
-  // Code HTML du widget avec l'ID du chatbot dynamique
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(qrUrl).then(() => {
+      toast({
+        title: 'URL Copied',
+        description: 'The chatbot URL has been copied to your clipboard.',
+      });
+    }).catch(() => {
+      toast({
+        title: 'Error',
+        description: 'Failed to copy the URL to clipboard.',
+        variant: 'destructive',
+      });
+    });
+  };
+
   const widgetCode = `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -185,47 +199,39 @@ const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
 </div>
 
 <script>
-const chatbot_id = ${chatbot.id}; // ID du chatbot dynamique
+const chatbot_id = ${chatbot.id};
 const bubble = document.getElementById('chat-bubble');
 const chatBox = document.getElementById('chat-box');
 const messages = document.getElementById('messages');
 const input = document.getElementById('chat-input');
 
-// Toggle chat avec animation
 bubble.addEventListener('click', () => {
   chatBox.classList.toggle('active');
 });
 
-// Ajouter un message
 function addMessage(sender, text) {
   const div = document.createElement('div');
   div.className = sender === 'user' ? 'message-user' : 'message-bot';
   div.innerHTML = \`<b>\${sender === 'user' ? 'Vous' : 'Bot'}:</b> \${text}\`;
   messages.appendChild(div);
-  messages.scrollTop = messages.scrollHeight; // Scroll automatique
+  messages.scrollTop = messages.scrollHeight;
 }
 
-// Envoyer un message
 async function sendMessage(msg) {
   addMessage('user', msg);
 
   try {
-    // Appel FastAPI /process
     await fetch(\`${import.meta.env.VITE_API_BASE_URL}/api/process/${chatbot.id}\`, {method:'POST'});
-
-    // Appel FastAPI /ask
     const res = await fetch(\`${import.meta.env.VITE_API_BASE_URL}/api/ask/${chatbot.id}?question=\${encodeURIComponent(msg)}\`, {method:'POST'});
     if(!res.ok) throw new Error(\`HTTP \${res.status}\`);
     const data = await res.json();
     addMessage('bot', data.answer || 'Réponse vide');
-
   } catch(err) {
     addMessage('bot', 'Erreur de connexion ou de format');
     console.error(err);
   }
 }
 
-// Envoyer message à Enter
 input.addEventListener('keypress', e => {
   if(e.key==='Enter' && input.value.trim()!=='') {
     sendMessage(input.value.trim());
@@ -233,7 +239,6 @@ input.addEventListener('keypress', e => {
   }
 });
 
-// Drag & Drop fluide de la bulle
 bubble.onmousedown = function(event) {
   let shiftX = event.clientX - bubble.getBoundingClientRect().left;
   let shiftY = event.clientY - bubble.getBoundingClientRect().top;
@@ -276,7 +281,6 @@ bubble.ondragstart = function() { return false; };
     });
   };
 
-  // Check if logo is a URL or fallback to a default
   const isLogoUrl = chatbot.logo?.startsWith('http');
   const logoContent = isLogoUrl ? (
     <img
@@ -284,12 +288,12 @@ bubble.ondragstart = function() { return false; };
       alt={`${chatbot.name} logo`}
       className="w-full h-full object-cover rounded-xl"
       onError={(e) => {
-        e.currentTarget.src = '/default-logo.png'; // Fallback image
+        e.currentTarget.src = '/default-logo.png';
         console.warn(`Failed to load logo for chatbot ${chatbot.id}`);
       }}
     />
   ) : (
-    chatbot.logo || '🤖' // Fallback emoji if no logo
+    chatbot.logo || '🤖'
   );
 
   return (
@@ -347,7 +351,18 @@ bubble.ondragstart = function() { return false; };
           </p>
 
           <div className="mb-4 p-3 bg-glass/30 rounded-lg">
-            <p className="text-xs text-muted-foreground mb-1">Chat URL:</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Chat URL:</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="bg-glass/50 border-glass-border hover:bg-glass/80"
+                onClick={handleCopyUrl}
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy
+              </Button>
+            </div>
             <p className="text-sm font-mono break-all">
               <a
                 href={qrUrl}
@@ -437,7 +452,6 @@ bubble.ondragstart = function() { return false; };
         </Card>
       </motion.div>
 
-      {/* Modal pour le QR Code */}
       <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
         <DialogContent className="glass-card border-glass-border p-6 max-w-sm">
           <DialogTitle>
@@ -459,7 +473,7 @@ bubble.ondragstart = function() { return false; };
                     alt={`QR Code for ${chatbot.name}`}
                     className="w-full h-full object-contain"
                     onError={(e) => {
-                      e.currentTarget.src = '/default-qr.png'; // Fallback QR image
+                      e.currentTarget.src = '/default-qr.png';
                       console.warn(`Failed to load QR code for chatbot ${chatbot.id}`);
                     }}
                   />
@@ -490,7 +504,6 @@ bubble.ondragstart = function() { return false; };
         </DialogContent>
       </Dialog>
 
-      {/* Modal pour afficher le code du widget */}
       <Dialog open={isCodeModalOpen} onOpenChange={setIsCodeModalOpen}>
         <DialogContent className="glass-card border-glass-border max-w-2xl">
           <DialogTitle>

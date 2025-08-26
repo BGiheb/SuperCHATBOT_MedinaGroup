@@ -1,4 +1,3 @@
-// conversation.controller.js
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
@@ -16,7 +15,9 @@ exports.getConversations = async (req, res, next) => {
     // Build the where clause for filtering conversations
     const where = {
       AND: [
-        user.role !== 'ADMIN' ? { userId: user.id } : {}, // Restrict to user's conversations unless admin
+        user.role === 'ADMIN'
+          ? {} // Admins see all conversations
+          : { chatbot: { ownerId: user.id } }, // Subadmins see conversations for their chatbots
         userId ? { userId: parseInt(userId, 10) } : {}, // Filter by userId if provided
         chatbotId ? { chatbotId: parseInt(chatbotId, 10) } : {}, // Filter by chatbotId if provided
         searchQuery
@@ -98,7 +99,7 @@ exports.getConversations = async (req, res, next) => {
 
     // Fetch statistics
     const totalConversations = await prisma.conversation.count({
-      where: user.role !== 'ADMIN' ? { userId: user.id } : {},
+      where: user.role === 'ADMIN' ? {} : { chatbot: { ownerId: user.id } },
     });
 
     const today = new Date();
@@ -112,10 +113,11 @@ exports.getConversations = async (req, res, next) => {
 
     const activeUsers = await prisma.conversation.groupBy({
       by: ['userId'],
-      where: user.role !== 'ADMIN' ? { userId: user.id } : {},
+      where: user.role === 'ADMIN' ? {} : { chatbot: { ownerId: user.id } },
       _count: { userId: true },
     });
 
+    console.log(`Fetched ${conversations.length} conversations for user ${user.id} (${user.role})`);
     res.json({
       conversations,
       stats: {
@@ -125,8 +127,8 @@ exports.getConversations = async (req, res, next) => {
       },
     });
   } catch (e) {
-    console.error('Error in getConversations:', e);
-    next(e);
+    console.error('Error in getConversations:', e.message, e.stack);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 
