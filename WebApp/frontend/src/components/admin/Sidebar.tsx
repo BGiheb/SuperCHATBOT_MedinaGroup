@@ -24,7 +24,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
   { name: 'Chatbots', href: '/chatbots', icon: Bot, roles: ['ADMIN', 'SUB_ADMIN'] },
   { name: 'Knowledge Base', href: '/knowledge-base', icon: BookOpen, roles: ['ADMIN', 'SUB_ADMIN'] },
-  { name: 'QR Codes', href: '/qr-codes', icon: QrCode, roles: ['ADMIN', 'SUB_ADMIN'] },
+ // { name: 'QR Codes', href: '/qr-codes', icon: QrCode, roles: ['ADMIN', 'SUB_ADMIN'] },
   { name: 'Chat History', href: '/chat-history', icon: MessageSquare, roles: ['ADMIN', 'SUB_ADMIN'] },
   { name: 'User Management', href: '/users', icon: Users, roles: ['ADMIN'] },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] },
