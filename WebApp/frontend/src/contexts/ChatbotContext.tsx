@@ -15,8 +15,10 @@ export interface Document {
 
 export interface Chatbot {
   id: number;
+  slug: string; // NEW: Add slug
   name: string;
   description?: string;
+  instructions?: string; // NEW: Add instructions
   logo: string;
   primaryColor: string;
   qrUrl: string;
@@ -24,19 +26,18 @@ export interface Chatbot {
   documentsCount: number;
   createdAt: string;
   documents?: Document[];
-    qrScans: number;
-
+  qrScans: number;
 }
 
 interface ChatbotContextType {
   chatbots: Chatbot[];
   selectedChatbot: Chatbot | null;
   addChatbot: (
-    chatbot: Omit<Chatbot, 'id' | 'createdAt' | 'qrUrl' | 'documentsCount' | 'documents'>,
+    chatbot: Omit<Chatbot, 'id' | 'slug' | 'createdAt' | 'qrUrl' | 'documentsCount' | 'documents'>,
     files?: { logo?: File | null; documents?: File[] }
   ) => Promise<void>;
-  updateChatbot: (id: number, updates: Partial<Chatbot> & { logoFile?: File; documents?: File[] }) => Promise<void>;
-  deleteChatbot: (id: number) => Promise<void>;
+  updateChatbot: (slug: string, updates: Partial<Chatbot> & { logoFile?: File; documents?: File[] }) => Promise<void>;
+  deleteChatbot: (slug: string) => Promise<void>;
   selectChatbot: (chatbot: Chatbot | null) => void;
   deleteDocument: (id: number, chatbotId: number) => Promise<void>;
   replaceDocument: (id: number, file: File, chatbotId: number) => Promise<void>;
@@ -89,12 +90,13 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
       });
       console.log('Chatbots fetched:', res.data.map(bot => ({
         id: bot.id,
+        slug: bot.slug, // NEW: Log slug
         name: bot.name,
         qrUrl: bot.qrUrl || 'MISSING',
       })));
       res.data.forEach(bot => {
         if (!bot.qrUrl) {
-          console.warn(`Chatbot ${bot.id} (${bot.name}) has no qrUrl`);
+          console.warn(`Chatbot ${bot.slug} (${bot.name}) has no qrUrl`);
           toast({
             title: 'Warning',
             description: `Chatbot ${bot.name} is missing a QR code`,
@@ -122,7 +124,7 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
   });
 
   const addChatbot = async (
-    chatbot: Omit<Chatbot, 'id' | 'createdAt' | 'qrUrl' | 'documentsCount' | 'documents'>,
+    chatbot: Omit<Chatbot, 'id' | 'slug' | 'createdAt' | 'qrUrl' | 'documentsCount' | 'documents'>,
     files?: { logo?: File | null; documents?: File[] }
   ) => {
     try {
@@ -132,6 +134,7 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
       const formData = new FormData();
       formData.append('name', chatbot.name);
       if (chatbot.description) formData.append('description', chatbot.description);
+      if (chatbot.instructions) formData.append('instructions', chatbot.instructions); // NEW: Add instructions
       formData.append('logoUrl', chatbot.logo);
       if (chatbot.primaryColor) formData.append('primaryColor', chatbot.primaryColor);
       if (files?.logo) {
@@ -152,7 +155,7 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
         },
       });
 
-      console.log('Chatbot created:', { id: res.data.id, name: res.data.name, qrUrl: res.data.qrUrl });
+      console.log('Chatbot created:', { id: res.data.id, slug: res.data.slug, name: res.data.name, qrUrl: res.data.qrUrl });
       queryClient.setQueryData<Chatbot[]>(['chatbots'], (old = []) => [...old, res.data]);
       queryClient.invalidateQueries({ queryKey: ['chatbots'] });
       toast({
@@ -171,12 +174,12 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateChatbot = async (
-    id: number,
+    slug: string,
     updates: Partial<Chatbot> & { logoFile?: File; documents?: File[] }
   ) => {
     try {
-      if (!id || isNaN(id)) throw new Error(`Invalid chatbot ID: ${id}`);
-      console.log('Updating chatbot ID:', id);
+      if (!slug) throw new Error(`Invalid chatbot slug: ${slug}`);
+      console.log('Updating chatbot slug:', slug);
       console.log('Updates object:', JSON.stringify(updates, null, 2));
 
       const token = localStorage.getItem('token');
@@ -192,6 +195,10 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
       if (updates.description !== undefined) {
         formData.append('description', updates.description);
         formDataEntries.push({ key: 'description', value: updates.description });
+      }
+      if (updates.instructions !== undefined) { // NEW: Add instructions
+        formData.append('instructions', updates.instructions);
+        formDataEntries.push({ key: 'instructions', value: updates.instructions });
       }
       if (updates.logoFile) {
         if (!(updates.logoFile instanceof File)) {
@@ -225,7 +232,7 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
       console.log('FormData contents:', JSON.stringify(formDataEntries, null, 2));
 
       const res = await axios.put<Chatbot & { hasChanges: boolean }>(
-        `${API_BASE_URL}/api/chatbots/${id}`,
+        `${API_BASE_URL}/api/chatbots/${slug}`,
         formData,
         {
           headers: {
@@ -237,9 +244,9 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
       console.log('API response:', res.data);
 
       queryClient.setQueryData<Chatbot[]>(['chatbots'], (old = []) =>
-        old.map((bot) => (bot.id === id ? res.data : bot))
+        old.map((bot) => (bot.slug === slug ? res.data : bot)) // CHANGED: Use slug
       );
-      queryClient.invalidateQueries({ queryKey: ['documents', id] });
+      queryClient.invalidateQueries({ queryKey: ['documents', slug] }); // CHANGED: Use slug
 
       toast({
         title: 'Chatbot updated',
@@ -258,15 +265,15 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const deleteChatbot = async (id: number) => {
+  const deleteChatbot = async (slug: string) => {
     try {
-      if (!id || isNaN(id)) throw new Error('Invalid chatbot ID');
+      if (!slug) throw new Error('Invalid chatbot slug');
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No token');
-      await axios.delete(`${API_BASE_URL}/api/chatbots/${id}`, {
+      await axios.delete(`${API_BASE_URL}/api/chatbots/${slug}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      queryClient.setQueryData<Chatbot[]>(['chatbots'], (old = []) => old.filter((bot) => bot.id !== id));
+      queryClient.setQueryData<Chatbot[]>(['chatbots'], (old = []) => old.filter((bot) => bot.slug !== slug));
       toast({
         title: 'Chatbot deleted',
         description: 'The chatbot has been deleted successfully.',
@@ -345,7 +352,7 @@ export function ChatbotProvider({ children }: { children: React.ReactNode }) {
   };
 
   const selectChatbot = (chatbot: Chatbot | null) => {
-    if (chatbot && (!chatbot.id || isNaN(chatbot.id))) {
+    if (chatbot && (!chatbot.slug)) { // CHANGED: Check slug
       console.warn('Invalid chatbot selected:', chatbot);
       return;
     }

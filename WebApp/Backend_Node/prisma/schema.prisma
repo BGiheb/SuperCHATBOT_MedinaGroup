@@ -32,6 +32,7 @@ model User {
 
 model Chatbot {
   id            Int           @id @default(autoincrement())
+  slug          String        @unique @default(uuid()) // NEW: UUID-based slug
   name          String
   description   String?
   logoUrl       String?

@@ -4,6 +4,7 @@ const cloudinary = require('../config/cloudinary');
 const fs = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
+const { v4: uuidv4 } = require('uuid'); // NEW: For generating slugs
 const prisma = new PrismaClient();
 
 const ensureUploadsDir = async () => {
@@ -50,6 +51,7 @@ exports.createChatbot = async (req, res, next) => {
       }
     }
 
+    const slug = uuidv4(); // NEW: Generate UUID slug
     const bot = await prisma.chatbot.create({
       data: {
         name,
@@ -58,11 +60,12 @@ exports.createChatbot = async (req, res, next) => {
         primaryColor,
         ownerId: req.user.id,
         isActive: true,
+        slug, // NEW: Include slug
       },
-      include: { owner: { select: { name: true } } }, // Inclure le nom du créateur
+      include: { owner: { select: { name: true } } },
     });
 
-    const url = `${process.env.BASE_URL || 'http://localhost:4000'}/c/${bot.id}`;
+    const url = `${process.env.BASE_URL || 'http://localhost:4000'}/c/${bot.slug}`; // CHANGED: Use slug
     const qrDataUrl = await QRCode.toDataURL(url);
 
     let documents = [];
@@ -79,7 +82,7 @@ exports.createChatbot = async (req, res, next) => {
           try {
             await fs.access(filePath);
             const upload = await cloudinary.uploader.upload(filePath, {
-              folder: `Uploads/${sanitizedName}+${bot.id}`,
+              folder: `Uploads/${sanitizedName}+${bot.slug}`, // CHANGED: Use slug
               resource_type: 'auto',
             });
             const fileType = path.extname(file.originalname).slice(1).toLowerCase();
@@ -100,7 +103,7 @@ exports.createChatbot = async (req, res, next) => {
 
     const [updatedBot] = await prisma.$transaction([
       prisma.chatbot.update({
-        where: { id: bot.id },
+        where: { slug }, // CHANGED: Use slug
         data: { qrUrl: qrDataUrl },
         include: { documents: true, owner: { select: { name: true } } },
       }),
@@ -109,9 +112,9 @@ exports.createChatbot = async (req, res, next) => {
 
     if (documents.length > 0) {
       try {
-        const pythonApiUrl = `${process.env.PYTHON_API_BASE_URL || 'http://127.0.0.1:8000'}/process/${bot.id}`;
+        const pythonApiUrl = `${process.env.PYTHON_API_BASE_URL || 'http://127.0.0.1:8000'}/process/${bot.slug}`; // CHANGED: Use slug
         const response = await axios.post(pythonApiUrl);
-        console.log(`Python API response for chatbot ${bot.id}:`, response.data);
+        console.log(`Python API response for chatbot ${bot.slug}:`, response.data);
       } catch (error) {
         console.error('Error calling Python API:', error.message);
       }
@@ -126,6 +129,7 @@ exports.createChatbot = async (req, res, next) => {
 
     res.status(201).json({
       ...updatedBot,
+      slug: updatedBot.slug, // NEW: Include slug
       logo: updatedBot.logoUrl || '🤖',
       primaryColor: updatedBot.primaryColor || '#3b82f6',
       documentsCount: updatedBot.documents.length,
@@ -139,9 +143,9 @@ exports.createChatbot = async (req, res, next) => {
 
 exports.updateChatbot = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!id || isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid or missing chatbot ID' });
+    const slug = req.params.slug; // CHANGED: Use slug
+    if (!slug) {
+      return res.status(400).json({ message: 'Invalid or missing chatbot slug' });
     }
 
     if (!req.user) {
@@ -149,7 +153,7 @@ exports.updateChatbot = async (req, res, next) => {
     }
 
     const bot = await prisma.chatbot.findUnique({
-      where: { id },
+      where: { slug }, // CHANGED: Use slug
       include: { documents: true, owner: { select: { name: true } } },
     });
     if (!bot) return res.status(404).json({ message: 'Chatbot not found' });
@@ -196,7 +200,7 @@ exports.updateChatbot = async (req, res, next) => {
           try {
             await fs.access(filePath);
             const upload = await cloudinary.uploader.upload(filePath, {
-              folder: `Uploads/${sanitizedName}+${id}`,
+              folder: `Uploads/${sanitizedName}+${bot.slug}`, // CHANGED: Use slug
               resource_type: 'auto',
             });
             const fileType = path.extname(file.originalname).slice(1).toLowerCase();
@@ -205,7 +209,7 @@ exports.updateChatbot = async (req, res, next) => {
               fileType,
               size: file.size,
               url: upload.secure_url,
-              chatbotId: id,
+              chatbotId: bot.id,
             };
           } catch (err) {
             console.error('Document file error:', err);
@@ -233,7 +237,7 @@ exports.updateChatbot = async (req, res, next) => {
 
     const [updatedBot] = await prisma.$transaction([
       prisma.chatbot.update({
-        where: { id },
+        where: { slug }, // CHANGED: Use slug
         data: updateData,
         include: { documents: true, owner: { select: { name: true } } },
       }),
@@ -242,9 +246,9 @@ exports.updateChatbot = async (req, res, next) => {
 
     if (documents.length > 0) {
       try {
-        const pythonApiUrl = `${process.env.PYTHON_API_BASE_URL || 'http://127.0.0.1:8000'}/process/${id}`;
+        const pythonApiUrl = `${process.env.PYTHON_API_BASE_URL || 'http://127.0.0.1:8000'}/process/${bot.slug}`; // CHANGED: Use slug
         const response = await axios.post(pythonApiUrl);
-        console.log(`Python API response for chatbot ${id}:`, response.data);
+        console.log(`Python API response for chatbot ${bot.slug}:`, response.data);
       } catch (error) {
         console.error('Error calling Python API:', error.message);
       }
@@ -259,6 +263,7 @@ exports.updateChatbot = async (req, res, next) => {
 
     res.status(200).json({
       ...updatedBot,
+      slug: updatedBot.slug, // NEW: Include slug
       logo: updatedBot.logoUrl || '🤖',
       primaryColor: updatedBot.primaryColor || '#3b82f6',
       documentsCount: updatedBot.documents.length,
@@ -273,13 +278,13 @@ exports.updateChatbot = async (req, res, next) => {
 
 exports.getChatbot = async (req, res, next) => {
   try {
-    const id = req.params.id ? parseInt(req.params.id, 10) : null;
-    if (!id || isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid or missing chatbot ID' });
+    const slug = req.params.slug; // CHANGED: Use slug
+    if (!slug) {
+      return res.status(400).json({ message: 'Invalid or missing chatbot slug' });
     }
 
     const bot = await prisma.chatbot.findUnique({
-      where: { id, isActive: true },
+      where: { slug, isActive: true }, // CHANGED: Query by slug
       include: { documents: true, owner: { select: { name: true } } },
     });
 
@@ -302,33 +307,33 @@ exports.getChatbot = async (req, res, next) => {
     }
 
     await prisma.$transaction(async (tx) => {
-      console.log(`Logging qRScan for chatbotId: ${id}, userId: ${userId}`);
+      console.log(`Logging qRScan for chatbot slug: ${slug}, userId: ${userId}`);
       await tx.qRScan.create({
         data: {
-          chatbotId: id,
+          chatbotId: bot.id,
           userId: userId,
           scannedAt: new Date(),
         },
       });
 
       await tx.chatbot.update({
-        where: { id },
+        where: { slug }, // CHANGED: Use slug
         data: {
           qrScanCount: { increment: 1 },
         },
       });
     });
 
-    // Fetch conversation stats
     const conversationStats = await prisma.conversation.groupBy({
       by: ['chatbotId'],
-      where: { chatbotId: id },
+      where: { chatbotId: bot.id },
       _count: { id: true },
     });
     const conversationsCount = conversationStats[0]?._count.id || 0;
 
     res.json({
       id: bot.id,
+      slug: bot.slug, // NEW: Include slug
       name: bot.name,
       description: bot.description,
       logo: bot.logoUrl || '🤖',
@@ -338,7 +343,7 @@ exports.getChatbot = async (req, res, next) => {
       documentsCount: bot.documents.length,
       documents: bot.documents,
       qrScans: bot.qrScanCount,
-      conversationsCount, // Added conversationsCount
+      conversationsCount,
       createdBy: bot.owner?.name || 'Unknown',
     });
   } catch (e) {
@@ -349,9 +354,9 @@ exports.getChatbot = async (req, res, next) => {
 
 exports.getChatbotForEdit = async (req, res, next) => {
   try {
-    const id = req.params.id ? parseInt(req.params.id, 10) : null;
-    if (!id || isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid or missing chatbot ID' });
+    const slug = req.params.slug; // CHANGED: Use slug
+    if (!slug) {
+      return res.status(400).json({ message: 'Invalid or missing chatbot slug' });
     }
 
     if (!req.user) {
@@ -359,7 +364,7 @@ exports.getChatbotForEdit = async (req, res, next) => {
     }
 
     const bot = await prisma.chatbot.findUnique({
-      where: { id },
+      where: { slug }, // CHANGED: Use slug
       include: { documents: true, owner: { select: { name: true } } },
     });
 
@@ -371,16 +376,16 @@ exports.getChatbotForEdit = async (req, res, next) => {
       return res.status(403).json({ message: 'Not authorized to edit this chatbot' });
     }
 
-    // Fetch conversation stats
     const conversationStats = await prisma.conversation.groupBy({
       by: ['chatbotId'],
-      where: { chatbotId: id },
+      where: { chatbotId: bot.id },
       _count: { id: true },
     });
     const conversationsCount = conversationStats[0]?._count.id || 0;
 
     res.json({
       id: bot.id,
+      slug: bot.slug, // NEW: Include slug
       name: bot.name,
       description: bot.description,
       logo: bot.logoUrl || '🤖',
@@ -388,7 +393,7 @@ exports.getChatbotForEdit = async (req, res, next) => {
       isActive: bot.isActive,
       documentsCount: bot.documents.length,
       documents: bot.documents,
-      conversationsCount, // Added conversationsCount
+      conversationsCount,
       createdBy: bot.owner?.name || 'Unknown',
     });
   } catch (e) {
@@ -405,7 +410,6 @@ exports.listMyChatbots = async (req, res, next) => {
       include: { documents: true, owner: { select: { name: true } } },
     });
 
-    // Fetch conversation stats for all chatbots
     const conversationStats = await prisma.conversation.groupBy({
       by: ['chatbotId'],
       where: { chatbotId: { in: bots.map(bot => bot.id) } },
@@ -413,16 +417,17 @@ exports.listMyChatbots = async (req, res, next) => {
     });
 
     console.log(`Fetched ${bots.length} chatbots for userId: ${req.user.id}, role: ${req.user.role}`);
-    console.log('Chatbot qrScanCounts:', bots.map(bot => ({ id: bot.id, qrScanCount: bot.qrScanCount })));
+    console.log('Chatbot qrScanCounts:', bots.map(bot => ({ slug: bot.slug, qrScanCount: bot.qrScanCount }))); // CHANGED: Log slug
 
     res.json(
       bots.map((bot) => ({
         ...bot,
+        slug: bot.slug, // NEW: Include slug
         logo: bot.logoUrl || '🤖',
         primaryColor: bot.primaryColor || '#3b82f6',
         documentsCount: bot.documents.length,
         qrScans: bot.qrScanCount || 0,
-        conversationsCount: conversationStats.find(stat => stat.chatbotId === bot.id)?._count.id || 0, // Added conversationsCount
+        conversationsCount: conversationStats.find(stat => stat.chatbotId === bot.id)?._count.id || 0,
         createdBy: bot.owner?.name || 'Unknown',
       }))
     );
@@ -443,6 +448,7 @@ exports.getQRCodes = async (req, res, next) => {
       where,
       select: {
         id: true,
+        slug: true, // NEW: Include slug
         name: true,
         qrUrl: true,
         logoUrl: true,
@@ -456,7 +462,6 @@ exports.getQRCodes = async (req, res, next) => {
       },
     });
 
-    // Fetch conversation stats for all chatbots
     const conversationStats = await prisma.conversation.groupBy({
       by: ['chatbotId'],
       where: { chatbotId: { in: chatbots.map(bot => bot.id) } },
@@ -466,11 +471,12 @@ exports.getQRCodes = async (req, res, next) => {
     res.json(
       chatbots.map((bot) => ({
         ...bot,
+        slug: bot.slug, // NEW: Include slug
         logo: bot.logoUrl || '🤖',
         primaryColor: bot.primaryColor || '#3b82f6',
         documentsCount: bot.documents.length,
         qrScans: bot.qrScanCount || 0,
-        conversationsCount: conversationStats.find(stat => stat.chatbotId === bot.id)?._count.id || 0, // Added conversationsCount
+        conversationsCount: conversationStats.find(stat => stat.chatbotId === bot.id)?._count.id || 0,
         createdBy: bot.owner?.name || 'Unknown',
       }))
     );
@@ -482,12 +488,12 @@ exports.getQRCodes = async (req, res, next) => {
 
 exports.regenerateQRCode = async (req, res, next) => {
   try {
-    const id = req.params.id ? parseInt(req.params.id, 10) : null;
-    if (!id || isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid or missing chatbot ID' });
+    const slug = req.params.slug; // CHANGED: Use slug
+    if (!slug) {
+      return res.status(400).json({ message: 'Invalid or missing chatbot slug' });
     }
     const bot = await prisma.chatbot.findUnique({
-      where: { id },
+      where: { slug }, // CHANGED: Use slug
       include: { owner: { select: { name: true } } },
     });
     if (!bot) return res.status(404).json({ message: 'Chatbot not found' });
@@ -495,29 +501,29 @@ exports.regenerateQRCode = async (req, res, next) => {
       return res.status(403).json({ message: 'Not authorized to regenerate this QR code' });
     }
 
-    const url = `${process.env.BASE_URL || 'http://localhost:4000'}/c/${bot.id}`;
+    const url = `${process.env.BASE_URL || 'http://localhost:4000'}/c/${bot.slug}`; // CHANGED: Use slug
     const qrDataUrl = await QRCode.toDataURL(url);
 
     const updated = await prisma.chatbot.update({
-      where: { id },
+      where: { slug }, // CHANGED: Use slug
       data: { qrUrl: qrDataUrl },
       include: { documents: true, owner: { select: { name: true } } },
     });
 
-    // Fetch conversation stats
     const conversationStats = await prisma.conversation.groupBy({
       by: ['chatbotId'],
-      where: { chatbotId: id },
+      where: { chatbotId: bot.id },
       _count: { id: true },
     });
     const conversationsCount = conversationStats[0]?._count.id || 0;
 
     res.json({
       ...updated,
+      slug: updated.slug, // NEW: Include slug
       logo: updated.logoUrl || '🤖',
       primaryColor: updated.primaryColor || '#3b82f6',
       documentsCount: updated.documents?.length || 0,
-      conversationsCount, // Added conversationsCount
+      conversationsCount,
       createdBy: updated.owner?.name || 'Unknown',
     });
   } catch (e) {
@@ -528,8 +534,8 @@ exports.regenerateQRCode = async (req, res, next) => {
 
 exports.uploadDocuments = async (req, res, next) => {
   try {
-    const chatbotId = parseInt(req.params.id, 10);
-    const bot = await prisma.chatbot.findUnique({ where: { id: chatbotId } });
+    const slug = req.params.slug; // CHANGED: Use slug
+    const bot = await prisma.chatbot.findUnique({ where: { slug } }); // CHANGED: Use slug
     if (!bot) return res.status(404).json({ message: 'Chatbot not found' });
     if (req.user.role !== 'ADMIN' && bot.ownerId !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized to upload documents for this bot' });
@@ -558,7 +564,7 @@ exports.uploadDocuments = async (req, res, next) => {
         try {
           await fs.access(filePath);
           const upload = await cloudinary.uploader.upload(filePath, {
-            folder: `Uploads/${sanitizedName}+${chatbotId}`,
+            folder: `Uploads/${sanitizedName}+${bot.slug}`, // CHANGED: Use slug
             resource_type: 'auto',
           });
           const fileType = path.extname(file.originalname).slice(1).toLowerCase();
@@ -567,7 +573,7 @@ exports.uploadDocuments = async (req, res, next) => {
             fileType,
             size: file.size,
             url: upload.secure_url,
-            chatbotId,
+            chatbotId: bot.id,
           };
         } catch (err) {
           console.error('Document file error:', err);
@@ -581,7 +587,7 @@ exports.uploadDocuments = async (req, res, next) => {
     );
 
     const updatedBot = await prisma.chatbot.findUnique({
-      where: { id: chatbotId },
+      where: { slug }, // CHANGED: Use slug
       include: { documents: true, owner: { select: { name: true } } },
     });
 
@@ -598,13 +604,9 @@ exports.uploadDocuments = async (req, res, next) => {
 
 exports.sendMessage = async (req, res, next) => {
   try {
-    const chatbotId = parseInt(req.params.id, 10);
-    if (!chatbotId || isNaN(chatbotId)) {
-      return res.status(400).json({ message: 'Invalid or missing chatbot ID' });
-    }
-
+    const slug = req.params.slug; // CHANGED: Use slug
     const bot = await prisma.chatbot.findUnique({
-      where: { id: chatbotId, isActive: true },
+      where: { slug, isActive: true }, // CHANGED: Use slug
       include: { owner: { select: { name: true } } },
     });
     if (!bot) {
@@ -638,7 +640,7 @@ exports.sendMessage = async (req, res, next) => {
     const existingSession = await prisma.session.findFirst({
       where: {
         userId: finalUserId,
-        chatbotId,
+        chatbotId: bot.id,
         endedAt: null,
       },
     });
@@ -646,7 +648,7 @@ exports.sendMessage = async (req, res, next) => {
       await prisma.session.create({
         data: {
           userId: finalUserId,
-          chatbotId,
+          chatbotId: bot.id,
           startedAt: new Date(),
         },
       });
@@ -657,7 +659,7 @@ exports.sendMessage = async (req, res, next) => {
       const encodedQuestion = encodeURIComponent(content.trim());
       const pythonApiUrl = `${
         process.env.PYTHON_API_BASE_URL || 'http://127.0.0.1:8000'
-      }/ask/${chatbotId}?question=${encodedQuestion}`;
+      }/ask/${bot.slug}?question=${encodedQuestion}`; // CHANGED: Use slug
       const response = await axios.post(pythonApiUrl, {}, {
         headers: {
           'Content-Type': 'application/json',
@@ -673,7 +675,7 @@ exports.sendMessage = async (req, res, next) => {
     const conversation = await prisma.conversation.create({
       data: {
         userId: finalUserId,
-        chatbotId,
+        chatbotId: bot.id,
         question: content,
         answer,
       },
@@ -681,6 +683,7 @@ exports.sendMessage = async (req, res, next) => {
 
     res.status(200).json({
       id: conversation.id.toString(),
+      slug: bot.slug, // NEW: Include slug
       content: answer,
       sender: 'bot',
       timestamp: conversation.createdAt,
@@ -695,13 +698,13 @@ exports.sendMessage = async (req, res, next) => {
 
 exports.getChatbotStats = async (req, res, next) => {
   try {
-    const id = req.params.id ? parseInt(req.params.id, 10) : null;
-    if (!id || isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid or missing chatbot ID' });
+    const slug = req.params.slug; // CHANGED: Use slug
+    if (!slug) {
+      return res.status(400).json({ message: 'Invalid or missing chatbot slug' });
     }
 
     const bot = await prisma.chatbot.findUnique({
-      where: { id },
+      where: { slug }, // CHANGED: Use slug
       include: { owner: { select: { name: true } } },
     });
     if (!bot) return res.status(404).json({ message: 'Chatbot not found' });
@@ -711,7 +714,7 @@ exports.getChatbotStats = async (req, res, next) => {
 
     const conversationStats = await prisma.conversation.groupBy({
       by: ['chatbotId'],
-      where: { chatbotId: id },
+      where: { chatbotId: bot.id },
       _count: { id: true },
     });
     const totalMessages = conversationStats[0]?._count.id || 0;
@@ -719,7 +722,7 @@ exports.getChatbotStats = async (req, res, next) => {
     const prevConversationStats = await prisma.conversation.groupBy({
       by: ['chatbotId'],
       where: {
-        chatbotId: id,
+        chatbotId: bot.id,
         createdAt: { lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
       },
       _count: { id: true },
@@ -729,14 +732,14 @@ exports.getChatbotStats = async (req, res, next) => {
 
     const userCount = await prisma.conversation.groupBy({
       by: ['userId'],
-      where: { chatbotId: id },
+      where: { chatbotId: bot.id },
       _count: { userId: true },
     });
 
     const anonymousUserCount = await prisma.conversation.groupBy({
       by: ['userId'],
       where: {
-        chatbotId: id,
+        chatbotId: bot.id,
         user: { isAnonymous: true },
       },
       _count: { userId: true },
@@ -744,18 +747,19 @@ exports.getChatbotStats = async (req, res, next) => {
 
     const activeSessions = await prisma.session.count({
       where: {
-        chatbotId: id,
+        chatbotId: bot.id,
         endedAt: null,
         startedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       },
     });
 
     const qrScans = await prisma.qRScan.count({
-      where: { chatbotId: id },
+      where: { chatbotId: bot.id },
     });
 
     res.json({
-      chatbotId: id,
+      chatbotId: bot.id,
+      slug: bot.slug, // NEW: Include slug
       totalMessages,
       messagesTrend: `${totalMessages > prevTotalMessages ? '+' : ''}${messagesTrend}%`,
       messagesTrendUp: totalMessages > prevTotalMessages,
@@ -773,25 +777,23 @@ exports.getChatbotStats = async (req, res, next) => {
 
 exports.getConversations = async (req, res, next) => {
   try {
-    const chatbotId = parseInt(req.params.id, 10);
+    const slug = req.params.slug; // CHANGED: Use slug
     const userId = parseInt(req.query.userId, 10);
-    if (!chatbotId || isNaN(chatbotId) || !userId || isNaN(userId)) {
-      return res.status(400).json({ message: 'Invalid or missing chatbot ID or user ID' });
+    if (!slug || !userId || isNaN(userId)) {
+      return res.status(400).json({ message: 'Invalid or missing chatbot slug or user ID' });
     }
 
-    // Check if chatbot exists and is active
     const bot = await prisma.chatbot.findUnique({
-      where: { id: chatbotId, isActive: true },
-      select: { id: true }, // Minimal selection for performance
+      where: { slug, isActive: true }, // CHANGED: Use slug
+      select: { id: true },
     });
     if (!bot) {
       return res.status(404).json({ message: 'Chatbot not found or inactive' });
     }
 
-    // Fetch conversations
     const conversations = await prisma.conversation.findMany({
       where: {
-        chatbotId,
+        chatbotId: bot.id,
         userId,
       },
       select: {
@@ -805,8 +807,8 @@ exports.getConversations = async (req, res, next) => {
       },
     });
 
-    console.log(`Fetched ${conversations.length} conversations for chatbot ${chatbotId} and user ${userId}`);
-    res.json(conversations); // Return array directly
+    console.log(`Fetched ${conversations.length} conversations for chatbot ${slug} and user ${userId}`);
+    res.json(conversations);
   } catch (e) {
     console.error('Error in getConversations:', e.message, e.stack);
     res.status(500).json({ message: 'Internal server error' });
@@ -821,7 +823,7 @@ exports.getUserStats = async (req, res, next) => {
     const where = userRole === 'ADMIN' ? {} : { ownerId: userId };
     const chatbots = await prisma.chatbot.findMany({
       where,
-      select: { id: true },
+      select: { id: true, slug: true }, // NEW: Include slug
       include: { owner: { select: { name: true } } },
     });
     const chatbotIds = chatbots.map((bot) => bot.id);
@@ -895,15 +897,22 @@ exports.getUserStats = async (req, res, next) => {
 
 exports.endSession = async (req, res, next) => {
   try {
-    const { chatbotId, userId } = req.body;
+    const { chatbotSlug, userId } = req.body; // CHANGED: Use chatbotSlug
+    if (!chatbotSlug || !userId) {
+      return res.status(400).json({ message: 'Chatbot slug and user ID are required' });
+    }
 
-    if (!chatbotId || !userId) {
-      return res.status(400).json({ message: 'Chatbot ID and User ID are required' });
+    const bot = await prisma.chatbot.findUnique({
+      where: { slug: chatbotSlug }, // CHANGED: Use slug
+      select: { id: true },
+    });
+    if (!bot) {
+      return res.status(404).json({ message: 'Chatbot not found' });
     }
 
     const session = await prisma.session.findFirst({
       where: {
-        chatbotId: parseInt(chatbotId, 10),
+        chatbotId: bot.id,
         userId: parseInt(userId, 10),
         endedAt: null,
       },

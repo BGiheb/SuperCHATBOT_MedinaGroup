@@ -17,6 +17,7 @@ import EditChatbotModal from '@/components/chatbots/EditChatbotModal';
 
 interface Chatbot {
   id: number;
+  slug: string; // NEW: Add slug to interface
   name: string;
   description?: string;
   primaryColor: string;
@@ -35,17 +36,17 @@ interface ChatbotCardProps {
 }
 
 const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
-  console.log(`Chatbot ${chatbot.id} - qrScans:`, chatbot.qrScans);
+  console.log(`Chatbot ${chatbot.slug} - qrScans:`, chatbot.qrScans); // CHANGED: Log slug
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const { toast } = useToast();
 
-  const qrUrl = `${import.meta.env.VITE_BASE_URL || window.location.origin}/c/${chatbot.id}`;
+  const qrUrl = `${import.meta.env.VITE_BASE_URL || window.location.origin}/c/${chatbot.slug}`; // CHANGED: Use slug
 
   const handleViewQR = () => {
     if (!chatbot.qrUrl) {
-      console.error('No QR code available for chatbot:', chatbot.id);
+      console.error('No QR code available for chatbot:', chatbot.slug); // CHANGED: Use slug
       toast({
         title: 'Error',
         description: 'No QR code available for this chatbot',
@@ -199,7 +200,7 @@ const ChatbotCard = ({ chatbot }: ChatbotCardProps) => {
 </div>
 
 <script>
-const chatbot_id = ${chatbot.id};
+const chatbot_slug = '${chatbot.slug}'; // CHANGED: Use slug
 const bubble = document.getElementById('chat-bubble');
 const chatBox = document.getElementById('chat-box');
 const messages = document.getElementById('messages');
@@ -221,8 +222,8 @@ async function sendMessage(msg) {
   addMessage('user', msg);
 
   try {
-    await fetch(\`${import.meta.env.VITE_API_BASE_URL}/api/process/${chatbot.id}\`, {method:'POST'});
-    const res = await fetch(\`${import.meta.env.VITE_API_BASE_URL}/api/ask/${chatbot.id}?question=\${encodeURIComponent(msg)}\`, {method:'POST'});
+    await fetch(\`${import.meta.env.VITE_API_BASE_URL}/api/process/${chatbot.slug}\`, {method:'POST'}); // CHANGED: Use slug
+    const res = await fetch(\`${import.meta.env.VITE_API_BASE_URL}/api/ask/${chatbot.slug}?question=\${encodeURIComponent(msg)}\`, {method:'POST'}); // CHANGED: Use slug
     if(!res.ok) throw new Error(\`HTTP \${res.status}\`);
     const data = await res.json();
     addMessage('bot', data.answer || 'Réponse vide');
@@ -249,7 +250,7 @@ bubble.onmousedown = function(event) {
   }
 
   function onMouseMove(event) {
-    moveAt(event.pageX, event.pageY);
+    moveAt(event.pageX, pageY);
   }
 
   document.addEventListener('mousemove', onMouseMove);
@@ -289,7 +290,7 @@ bubble.ondragstart = function() { return false; };
       className="w-full h-full object-cover rounded-xl"
       onError={(e) => {
         e.currentTarget.src = '/default-logo.png';
-        console.warn(`Failed to load logo for chatbot ${chatbot.id}`);
+        console.warn(`Failed to load logo for chatbot ${chatbot.slug}`); // CHANGED: Use slug
       }}
     />
   ) : (
@@ -474,7 +475,7 @@ bubble.ondragstart = function() { return false; };
                     className="w-full h-full object-contain"
                     onError={(e) => {
                       e.currentTarget.src = '/default-qr.png';
-                      console.warn(`Failed to load QR code for chatbot ${chatbot.id}`);
+                      console.warn(`Failed to load QR code for chatbot ${chatbot.slug}`); // CHANGED: Use slug
                     }}
                   />
                 </motion.div>

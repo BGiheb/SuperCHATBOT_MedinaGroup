@@ -4,22 +4,32 @@ const prisma = new PrismaClient();
 
 exports.getConversations = async (req, res, next) => {
   try {
-    const { searchQuery, userId, chatbotId } = req.query;
+    const { searchQuery, userId, chatbotSlug } = req.query; // CHANGED: Use chatbotSlug
     const user = req.user;
 
-    // Validate user
     if (!user || !user.id) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    // Build the where clause for filtering conversations
+    let chatbotId;
+    if (chatbotSlug) {
+      const bot = await prisma.chatbot.findUnique({
+        where: { slug: chatbotSlug }, // CHANGED: Query by slug
+        select: { id: true },
+      });
+      if (!bot) {
+        return res.status(404).json({ message: 'Chatbot not found' });
+      }
+      chatbotId = bot.id;
+    }
+
     const where = {
       AND: [
         user.role === 'ADMIN'
-          ? {} // Admins see all conversations
-          : { chatbot: { ownerId: user.id } }, // Subadmins see conversations for their chatbots
-        userId ? { userId: parseInt(userId, 10) } : {}, // Filter by userId if provided
-        chatbotId ? { chatbotId: parseInt(chatbotId, 10) } : {}, // Filter by chatbotId if provided
+          ? {}
+          : { chatbot: { ownerId: user.id } },
+        userId ? { userId: parseInt(userId, 10) } : {},
+        chatbotId ? { chatbotId } : {}, // CHANGED: Use resolved chatbotId
         searchQuery
           ? {
               OR: [
@@ -31,7 +41,6 @@ exports.getConversations = async (req, res, next) => {
       ],
     };
 
-    // Fetch grouped conversations
     const groupedConversations = await prisma.conversation.groupBy({
       by: ['userId', 'chatbotId'],
       where: where.AND.reduce((acc, condition) => ({ ...acc, ...condition }), {}),
@@ -39,7 +48,6 @@ exports.getConversations = async (req, res, next) => {
       _count: { id: true },
     });
 
-    // Fetch detailed conversation data for each group
     const conversations = await Promise.all(
       groupedConversations.map(async (group) => {
         const messages = await prisma.conversation.findMany({
@@ -50,12 +58,11 @@ exports.getConversations = async (req, res, next) => {
           },
           include: {
             user: { select: { id: true, name: true, email: true, isAnonymous: true } },
-            chatbot: { select: { id: true, name: true, primaryColor: true, logoUrl: true } },
+            chatbot: { select: { id: true, slug: true, name: true, primaryColor: true, logoUrl: true } }, // NEW: Include slug
           },
           orderBy: { createdAt: 'desc' },
         });
 
-        // Fetch session status
         const session = await prisma.session.findFirst({
           where: {
             userId: group.userId,
@@ -64,14 +71,15 @@ exports.getConversations = async (req, res, next) => {
           },
         });
 
-        const latestMessage = messages[0]; // Most recent message
+        const latestMessage = messages[0];
         return {
-          id: `${group.userId}-${group.chatbotId}`, // Unique ID for the grouped conversation
+          id: `${group.userId}-${group.chatbotId}`,
           userId: group.userId,
           userName: latestMessage.user.name || 'Anonymous',
           userEmail: latestMessage.user.email,
           isAnonymous: latestMessage.user.isAnonymous,
           chatbotId: group.chatbotId,
+          chatbotSlug: latestMessage.chatbot.slug, // NEW: Include slug
           chatbotName: latestMessage.chatbot.name,
           chatbotLogo: latestMessage.chatbot.logoUrl,
           chatbotPrimaryColor: latestMessage.chatbot.primaryColor,
@@ -97,7 +105,6 @@ exports.getConversations = async (req, res, next) => {
       })
     );
 
-    // Fetch statistics
     const totalConversations = await prisma.conversation.count({
       where: user.role === 'ADMIN' ? {} : { chatbot: { ownerId: user.id } },
     });
@@ -134,19 +141,24 @@ exports.getConversations = async (req, res, next) => {
 
 exports.deleteConversation = async (req, res, next) => {
   try {
-    const { userId, chatbotId } = req.params;
+    const { userId, chatbotSlug } = req.params; // CHANGED: Use chatbotSlug
     const user = req.user;
 
-    if (!userId || !chatbotId || isNaN(userId) || isNaN(chatbotId)) {
-      return res.status(400).json({ message: 'Invalid or missing userId or chatbotId' });
+    if (!userId || !chatbotSlug || isNaN(userId)) {
+      return res.status(400).json({ message: 'Invalid or missing userId or chatbotSlug' });
     }
 
     const parsedUserId = parseInt(userId, 10);
-    const parsedChatbotId = parseInt(chatbotId, 10);
+    const bot = await prisma.chatbot.findUnique({
+      where: { slug: chatbotSlug }, // CHANGED: Query by slug
+      select: { id: true },
+    });
+    if (!bot) {
+      return res.status(404).json({ message: 'Chatbot not found' });
+    }
 
-    // Check if any conversations exist for the user-chatbot pair
     const conversations = await prisma.conversation.findMany({
-      where: { userId: parsedUserId, chatbotId: parsedChatbotId },
+      where: { userId: parsedUserId, chatbotId: bot.id },
     });
 
     if (conversations.length === 0) {
@@ -157,9 +169,8 @@ exports.deleteConversation = async (req, res, next) => {
       return res.status(403).json({ message: 'Not authorized to delete these conversations' });
     }
 
-    // Delete all conversations for the user-chatbot pair
     await prisma.conversation.deleteMany({
-      where: { userId: parsedUserId, chatbotId: parsedChatbotId },
+      where: { userId: parsedUserId, chatbotId: bot.id },
     });
 
     res.status(200).json({ message: 'Conversations deleted successfully' });

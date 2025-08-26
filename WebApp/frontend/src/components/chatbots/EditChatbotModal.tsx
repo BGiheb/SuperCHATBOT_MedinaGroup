@@ -1,4 +1,3 @@
-// components/EditChatbotModal.tsx
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { X, Upload, Palette, Trash2, FileText, Type, Image, PaletteIcon, File, ToggleLeft, Bot } from 'lucide-react';
@@ -19,6 +18,18 @@ import { Chatbot, Document } from '@/contexts/ChatbotContext';
 import { HexColorPicker } from 'react-colorful';
 import axios from 'axios';
 
+interface Chatbot {
+  id: number;
+  slug: string; // NEW: Add slug to interface
+  name: string;
+  description?: string;
+  instructions?: string;
+  primaryColor: string;
+  logo: string;
+  isActive: boolean;
+  documents: Document[];
+}
+
 interface EditChatbotModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -32,7 +43,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
   const { toast } = useToast();
   const [name, setName] = useState(chatbot.name);
   const [description, setDescription] = useState(chatbot.description || '');
-  const [instructions, setInstructions] = useState(chatbot.instructions || ''); // Ajout du state pour instructions
+  const [instructions, setInstructions] = useState(chatbot.instructions || '');
   const [primaryColor, setPrimaryColor] = useState(chatbot.primaryColor || '#3b82f6');
   const [logo, setLogo] = useState(chatbot.logo || '🤖');
   const [isActive, setIsActive] = useState(chatbot.isActive);
@@ -52,10 +63,10 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
 
   useEffect(() => {
     // Réinitialisation des champs du formulaire et des documents lorsque le modal s'ouvre ou que le chatbot change
-    console.log('Resetting form fields for chatbot:', { id: chatbot.id, name: chatbot.name, logo: chatbot.logo });
+    console.log('Resetting form fields for chatbot:', { slug: chatbot.slug, name: chatbot.name, logo: chatbot.logo }); // CHANGED: Log slug
     setName(chatbot.name);
     setDescription(chatbot.description || '');
-    setInstructions(chatbot.instructions || ''); // Réinitialisation des instructions
+    setInstructions(chatbot.instructions || '');
     setPrimaryColor(chatbot.primaryColor || '#3b82f6');
     setLogo(chatbot.logo || '🤖');
     setIsActive(chatbot.isActive);
@@ -72,8 +83,8 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
         if (!token) {
           throw new Error("Aucun token d'authentification trouvé");
         }
-        console.log(`Fetching chatbot data for ID: ${chatbot.id} from ${API_BASE_URL}/api/chatbots/${chatbot.id}/edit`);
-        const response = await axios.get(`${API_BASE_URL}/api/chatbots/${chatbot.id}/edit`, {
+        console.log(`Fetching chatbot data for slug: ${chatbot.slug} from ${API_BASE_URL}/api/chatbots/${chatbot.slug}/edit`); // CHANGED: Use slug
+        const response = await axios.get(`${API_BASE_URL}/api/chatbots/${chatbot.slug}/edit`, { // CHANGED: Use slug
           headers: { Authorization: `Bearer ${token}` },
         });
         const fetchedChatbot = response.data;
@@ -81,7 +92,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
         setExistingDocuments(fetchedChatbot.documents || []);
         setName(fetchedChatbot.name);
         setDescription(fetchedChatbot.description || '');
-        setInstructions(fetchedChatbot.instructions || ''); // Mise à jour des instructions
+        setInstructions(fetchedChatbot.instructions || '');
         setPrimaryColor(fetchedChatbot.primaryColor || '#3b82f6');
         setLogo(fetchedChatbot.logo || '🤖');
         setIsActive(fetchedChatbot.isActive);
@@ -102,7 +113,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
       setExistingDocuments([]);
       setDocumentsToDelete([]);
     }
-  }, [open, chatbot.id, toast]);
+  }, [open, chatbot.slug, toast]); // CHANGED: Use chatbot.slug in dependency array
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,13 +129,13 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
 
     try {
       for (const docId of documentsToDelete) {
-        await deleteDocument(docId, chatbot.id);
+        await deleteDocument(docId, chatbot.id); // Note: deleteDocument may still use id internally
       }
 
       const updates: Partial<Chatbot> & { logoFile?: File; documents?: File[] } = {
         name,
         description,
-        instructions, // Ajout des instructions dans les mises à jour
+        instructions,
         primaryColor,
         logo,
         isActive,
@@ -141,7 +152,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
       const hasChanges =
         name !== chatbot.name ||
         description !== (chatbot.description || '') ||
-        instructions !== (chatbot.instructions || '') || // Vérification des modifications des instructions
+        instructions !== (chatbot.instructions || '') ||
         primaryColor !== (chatbot.primaryColor || '#3b82f6') ||
         logo !== (chatbot.logo || '🤖') ||
         isActive !== chatbot.isActive ||
@@ -150,7 +161,7 @@ const EditChatbotModal = ({ open, onOpenChange, chatbot }: EditChatbotModalProps
         documentsToDelete.length > 0;
 
       console.log('Submitting updates:', updates, 'Has changes:', hasChanges);
-      await updateChatbot(chatbot.id, updates);
+      await updateChatbot(chatbot.slug, updates); // CHANGED: Use slug
 
       toast({
         title: hasChanges ? 'Chatbot mis à jour' : 'Aucune modification',

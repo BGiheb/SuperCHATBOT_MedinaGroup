@@ -48,7 +48,7 @@ router.post(
 );
 
 router.put(
-  '/:id',
+  '/:slug', // CHANGED: Use :slug
   auth,
   upload.fields([
     { name: 'logo', maxCount: 1 },
@@ -56,22 +56,22 @@ router.put(
   ]),
   ctrl.updateChatbot
 );
-router.get('/user-stats', auth, ctrl.getUserStats); 
-router.get('/my', auth, ctrl.listMyChatbots); 
-router.get('/', auth, ctrl.listMyChatbots)
+router.get('/user-stats', auth, ctrl.getUserStats);
+router.get('/my', auth, ctrl.listMyChatbots);
+router.get('/', auth, ctrl.listMyChatbots);
 router.get('/qr-codes', auth, ctrl.getQRCodes);
-router.get('/:id',ctrl.getChatbot);
-router.post('/:id/messages', ctrl.sendMessage);
-router.get('/:id/stats', auth, ctrl.getChatbotStats);
-router.get('/:id/conversations', ctrl.getConversations);
+router.get('/:slug', ctrl.getChatbot); // CHANGED: Use :slug
+router.post('/:slug/messages', ctrl.sendMessage); // CHANGED: Use :slug
+router.get('/:slug/stats', auth, ctrl.getChatbotStats); // CHANGED: Use :slug
+router.get('/:slug/conversations', ctrl.getConversations); // CHANGED: Use :slug
 router.post(
-  '/:id/documents',
+  '/:slug/documents', // CHANGED: Use :slug
   auth,
   upload.array('documents', 10),
   ctrl.uploadDocuments
 );
-router.post('/:id/regenerate-qr', auth, ctrl.regenerateQRCode);
-router.post('/:id/end-session', ctrl.endSession);
-router.get('/:id/edit', auth, ctrl.getChatbotForEdit); // New endpoint
+router.post('/:slug/regenerate-qr', auth, ctrl.regenerateQRCode); // CHANGED: Use :slug
+router.post('/:slug/end-session', ctrl.endSession); // CHANGED: Use :slug
+router.get('/:slug/edit', auth, ctrl.getChatbotForEdit); // CHANGED: Use :slug
 
 module.exports = router;
